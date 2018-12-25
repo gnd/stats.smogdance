@@ -17,6 +17,16 @@ function validate_int($input, $link) {
     }
 }
 
+/**
+ * Sanitizes a input parameter of the type string
+ *
+ * @param string $input input string
+ * @return Sanitized input string
+ */
+function validate_str($input, $link) {
+    return mysqli_real_escape_string($link, $input);
+}
+
 
 include "db_class.php";
 $mydb = new db();
@@ -69,56 +79,6 @@ switch ($substance){
         break;
 }
 
-/*
-use Webit\DownSampling\DownSampler\LargestTriangleThreeBucketsDownSampler;
-$data = array();
-for ($i=0; $i < 500; $i++) {
-    $data[] = array($i, mt_rand(0, 200));
-}
-$sampler = new LargestTriangleThreeBucketsDownSampler();
-$sampled = $sampler->sampleDown($data, 100);
-echo count($sampled); // displays 100
-
-$hours = [];
-$hour_values = [];
-$days = [];
-$day_values = [];
-$sensor_id = "286";
-// Get hourly data for the last 30 days
-$i = 0;
-$hour_num = 0;
-$hour_sum = 0;
-$data = $mydb->getLastMonthData($sensor_id);
-while ($line = mysqli_fetch_array($data)) {
-    if (($i % 4) == 0) {
-        $hours[] = $hour_num;
-        $hour_values[] = $hour_sum / 4;
-        $hour_sum = 0;
-        $hour_num = ($hour_num + 1) % 24;
-        $i++;
-    } else {
-        $hour_sum = $hour_sum + $line[1];
-        $i++;
-    }
-}
-
-// Compute daily averages for the last 30 days from the data
-$i = 0;
-$day_num = 0;
-$day_sum = 0;
-foreach ($hour_values as $hour) {
-    if (($i % 24) == 0) {
-        $days[] = $day_num;
-        $day_values[] = $day_sum / 24;
-        $day_sum = 0;
-        $day_num++;
-        $i++;
-    } else {
-        $day_sum = $day_sum + $hour;
-        $i++;
-    }
-}*/
-
 ?>
 
 <html>
@@ -143,78 +103,78 @@ foreach ($hour_values as $hour) {
     <br/>
 </body>
 <script>
-var full = document.getElementById("full").getContext('2d');
-var graph_height = window.innerHeight * 0.9;
-var chart_max = <?php echo $chart_max; ?>;
-var thresholds = <?php echo "[".implode(",", $thresholds)."]"; ?>;
-var grd = full.createLinearGradient(0, graph_height,  0,  0);
-grd.addColorStop(0, '#9eec80');
-if ((thresholds[1] / chart_max) < 1) {
-    grd.addColorStop((thresholds[1] / chart_max), '#ffff00');
-}
-if ((thresholds[2] / chart_max) < 1) {
-    grd.addColorStop((thresholds[2] / chart_max), '#ffa500');
-}
-if ((thresholds[3] / chart_max) < 1) {
-    grd.addColorStop((thresholds[3] / chart_max), '#ff0000');
-}
-if ((thresholds[4] / chart_max) < 1) {
-    grd.addColorStop((thresholds[4] / chart_max), '#e50883');
-}
-
-var myChart = new Chart(full, {
-    type: 'line',
-    data: {
-        labels: [   <?php
-                        $data = "";
-                        foreach ($points as $point) {
-                            $data .= "'" . $point[0] . "',\n";
-                        }
-                        echo substr($data, 0, -2); // remove last colon
-                    ?>
-
-                ],
-        datasets: [ {
-            label: '<?php
-                        echo $substance . " - full";
-                    ?>',
-            data: [ <?php
-                $data = "";
-                        foreach ($points as $point) {
-                            if ($point[1] != "") {
-                                $data .= $point[1] . ",";
-                            } else {
-                                $data .= "'',";
-                            }
-                        }
-                        echo substr($data, 0, -2); // remove last colon
-                    ?> ],
-            spanGaps: true,
-            borderWidth: 1,
-            borderColor: grd,
-            pointStyle: 'cross',
-            pointBackgroundColor: 'rgb(0,0,0)',
-            pointBorderColor: 'rgb(0,0,0)',
-            backgroundColor: grd,
-            tension: 0.6
-            }
-        ]
-    },
-    options: {
-        scales: {
-            xAxes: [{
-                type: 'time',
-                time: {
-                    unit: 'day'
-                }
-            }],
-            yAxes: [{
-                ticks: {
-                    max: chart_max
-                }
-            }]
-        }
+    var full = document.getElementById("full").getContext('2d');
+    var graph_height = window.innerHeight * 0.9;
+    var chart_max = <?php echo $chart_max; ?>;
+    var thresholds = <?php echo "[".implode(",", $thresholds)."]"; ?>;
+    var grd = full.createLinearGradient(0, graph_height,  0,  0);
+    grd.addColorStop(0, '#9eec80');
+    if ((thresholds[1] / chart_max) < 1) {
+        grd.addColorStop((thresholds[1] / chart_max), '#ffff00');
     }
-});
+    if ((thresholds[2] / chart_max) < 1) {
+        grd.addColorStop((thresholds[2] / chart_max), '#ffa500');
+    }
+    if ((thresholds[3] / chart_max) < 1) {
+        grd.addColorStop((thresholds[3] / chart_max), '#ff0000');
+    }
+    if ((thresholds[4] / chart_max) < 1) {
+        grd.addColorStop((thresholds[4] / chart_max), '#e50883');
+    }
+
+    var myChart = new Chart(full, {
+        type: 'line',
+        data: {
+            labels: [   <?php
+                            $data = "";
+                            foreach ($points as $point) {
+                                $data .= "'" . $point[0] . "',\n";
+                            }
+                            echo substr($data, 0, -2); // remove last colon
+                        ?>
+
+                    ],
+            datasets: [ {
+                label: '<?php
+                            echo $substance . " - full";
+                        ?>',
+                data: [ <?php
+                    $data = "";
+                            foreach ($points as $point) {
+                                if ($point[1] != "") {
+                                    $data .= $point[1] . ",";
+                                } else {
+                                    $data .= "'',";
+                                }
+                            }
+                            echo substr($data, 0, -2); // remove last colon
+                        ?> ],
+                spanGaps: true,
+                borderWidth: 1,
+                borderColor: grd,
+                pointStyle: 'cross',
+                pointBackgroundColor: 'rgb(0,0,0)',
+                pointBorderColor: 'rgb(0,0,0)',
+                backgroundColor: grd,
+                tension: 0.6
+                }
+            ]
+        },
+        options: {
+            scales: {
+                xAxes: [{
+                    type: 'time',
+                    time: {
+                        unit: 'day'
+                    }
+                }],
+                yAxes: [{
+                    ticks: {
+                        max: chart_max
+                    }
+                }]
+            }
+        }
+    });
 </script>
 </html>
