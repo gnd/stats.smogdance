@@ -6,5 +6,7 @@ $db_name = "";
 $db_user = "";
 $db_pass = "";
 $db_prfx = "";
+$db_table = "";
+$data_table = "";
 
 ?>

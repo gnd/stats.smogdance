@@ -15,12 +15,12 @@ class db {
     }
 
     function getCitySensors($city) {
-        $result = $this->db->query($kak = "SELECT id, name FROM sensors WHERE city = '" . $city . "';");
+        $result = $this->db->query($kak = "SELECT id, name FROM {$db_table} WHERE city = '" . $city . "';");
         return $result;
     }
 
     function getLastMonthData($sensor_id) {
-        $result = $this->db->query("SELECT timestamp, pm10 from sensor_data WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and sensor_id = " . $sensor_id . ";");
+        $result = $this->db->query("SELECT timestamp, pm10 from {$data_table} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and sensor_id = " . $sensor_id . ";");
         return $result;
     }
 
@@ -30,12 +30,12 @@ class db {
             $sensors_selector .= "sensor_id = {$sensor} OR ";
         }
         $sensors_selector = substr($sensors_selector, 0, -4);
-        $result = $this->db->query("SELECT sensor_id, timestamp, pm10 from sensor_data WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and ({$sensors_selector});");
+        $result = $this->db->query("SELECT sensor_id, timestamp, pm10 from {$data_table} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and ({$sensors_selector});");
         return $result;
     }
 
     function getSensorInfo($sensor_id) {
-        $result = $this->db->query("SELECT city, name from sensors WHERE id = " . $sensor_id . ";");
+        $result = $this->db->query("SELECT city, name from {$db_table} WHERE id = " . $sensor_id . ";");
         return $result;
     }
 
