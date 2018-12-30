@@ -56,7 +56,7 @@ if (isset($_REQUEST["id"]) && ($_REQUEST["id"] != "")) {
     // Get sensor info
     $res = $mydb->getSensorInfo($sensor_id);
     $sensor_data = mysqli_fetch_array($res);
-    $city_name = $sensor_data[0];
+    $city = $sensor_data[0];
     $sensor_name = $sensor_data[1];
     $substance = "pm10";
 
@@ -285,8 +285,14 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         } else {
             if ($city_chart) {
                 echo "smog.dance / {$city} sensors - {$substance}\n";
+                $city = ucfirst($city);
+                $substance = strtoupper($substance);
+                $chart_title = "{$city} - {$substance} (last 30 days)";
             } else {
-                echo "smog.dance / {$sensor_name} , {$city_name} - {$substance}\n";
+                echo "smog.dance / {$sensor_name}, {$city} - {$substance}\n";
+                $city = ucfirst($city);
+                $substance = strtoupper($substance);
+                $chart_title = "{$sensor_name}, {$city} - {$substance}";
             }
         }
     ?>
@@ -341,6 +347,10 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         type: 'line',
         data: <?php echo $chart_data; ?>,
         options: {
+            title: {
+                display: true,
+                text: '<?php echo $chart_title; ?>'
+            },
             scales: {
                 xAxes: [{
                     type: 'time',
