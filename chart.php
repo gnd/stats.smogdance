@@ -168,7 +168,11 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         $sensor_count = sizeof($sensor_ids);
         foreach ($sensor_data_temp[$first_id] as $line) {
             $sensor_timestamps[] = $line[0];
-            $sensor_data[$first_id][] = $line[1];
+            if ($line[1] == 0) {
+                $sensor_data[$first_id][] = '';
+            } else {
+                $sensor_data[$first_id][] = $line[1];
+            }
             $first_time = strtotime($line[0]);
             foreach ($sensor_ids as $sensor_id) {
                 if ($sensor_id != $first_id) {
@@ -177,15 +181,25 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                     $time_diff = round(($first_time - $this_time)/60,2);
                     if (abs($time_diff) < 7) {
                         $new_index = $sensor_indexes[$sensor_id] + 1;
-                        $sensor_data[$sensor_id][] = (int)$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1];
                         $sensor_indexes[$sensor_id] = $sensor_indexes[$sensor_id] + 1;
+                        $datapoint = (int)$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1];
+                        if ($datapoint == 0) {
+                            $sensor_data[$sensor_id][] = '';
+                        } else {
+                            $sensor_data[$sensor_id][] = $datapoint;
+                        }
                     } else {
                         if ($time_diff > 0) {
                             $new_index = $sensor_indexes[$sensor_id] + 1;
                             $this_time = strtotime($sensor_data_temp[$sensor_id][$new_index][0]);
                             $time_diff = round(($first_time - $this_time)/60,2);
                             if (abs($time_diff) < 7) {
-                                $sensor_data[$sensor_id][] = (int)$sensor_data_temp[$sensor_id][$new_index][1];
+                                $datapoint = (int)$sensor_data_temp[$sensor_id][$new_index][1];
+                                if ($datapoint == 0) {
+                                        $sensor_data[$sensor_id][] = '';
+                                } else {
+                                    $sensor_data[$sensor_id][] = $datapoint;
+                                }
                                 $new_index = $sensor_indexes[$sensor_id] + 1;
                                 $sensor_indexes[$sensor_id] = $new_index;
                             } else {
@@ -220,8 +234,8 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             $chart_data .= "\t\t\tborderWidth: 1,\n";
             $chart_data .= "\t\t\tborderColor: '#' + pal[{$i}],\n";
             $chart_data .= "\t\t\tpointStyle: 'cross',\n";
-            $chart_data .= "\t\t\tpointBackgroundColor: 'rgb(0,0,0)',\n";
-            $chart_data .= "\t\t\tpointBorderColor: 'rgb(0,0,0)',\n";
+            $chart_data .= "\t\t\tpointBackgroundColor: 'rgb(0,0,0,0.2)',\n";
+            $chart_data .= "\t\t\tpointBorderColor: 'rgb(0,0,0,0.2)',\n";
             $chart_data .= "\t\t\tbackgroundColor: 'rgba(255,255,255,0)',\n";
             $chart_data .= "\t\t\ttension: 0.6\n";
             $chart_data .= "},";
