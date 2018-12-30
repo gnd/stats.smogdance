@@ -170,36 +170,25 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             $sensor_timestamps[] = $line[0];
             $sensor_data[$first_id][] = $line[1];
             $first_time = strtotime($line[0]);
-            //echo "\n\nInitial data: {$line[0]}, {$line[1]}";
             foreach ($sensor_ids as $sensor_id) {
                 if ($sensor_id != $first_id) {
-                    //echo "\nDoing {$sensor_names[$sensor_id]}";
                     $this_time = strtotime($sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][0]);
                     // If timestamp close to the first_time timestamp
                     $time_diff = round(($first_time - $this_time)/60,2);
                     if (abs($time_diff) < 7) {
-                        //echo " fits! (first: {$first_time} this: {$this_time} diff: {$time_diff})";
                         $new_index = $sensor_indexes[$sensor_id] + 1;
-                        //echo "\n Increasing index for sensor {$sensor_id} to {$new_index}";
-                        //echo "\n Going to store '{$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1]}' into {$sensor_id}\n";
                         $sensor_data[$sensor_id][] = (int)$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1];
                         $sensor_indexes[$sensor_id] = $sensor_indexes[$sensor_id] + 1;
                     } else {
-                        //echo " doesnt! (first: {$first_time} this: {$this_time} diff: {$time_diff})";
                         if ($time_diff > 0) {
-                            //echo "\n Main sensor too much in the future. Increasing index for sensor {$sensor_id} to {$new_index} to catch up";
                             $new_index = $sensor_indexes[$sensor_id] + 1;
                             $this_time = strtotime($sensor_data_temp[$sensor_id][$new_index][0]);
                             $time_diff = round(($first_time - $this_time)/60,2);
-                            //echo "\n Checking {$sensor_names[$sensor_id]} again: ";
                             if (abs($time_diff) < 7) {
-                                //echo " fits! (first: {$first_time} this: {$this_time}) diff: {$time_diff})";
                                 $sensor_data[$sensor_id][] = (int)$sensor_data_temp[$sensor_id][$new_index][1];
                                 $new_index = $sensor_indexes[$sensor_id] + 1;
-                                //echo "\n Increasing index for sensor {$sensor_id} to {$new_index}";
                                 $sensor_indexes[$sensor_id] = $new_index;
                             } else {
-                                //echo " doesnt! (first: {$first_time} this: {$this_time} diff: {$time_diff})";
                                 $sensor_indexes[$sensor_id] = $new_index;
                                 $sensor_data[$sensor_id][] = '';
                             }
