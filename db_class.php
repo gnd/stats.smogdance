@@ -12,6 +12,7 @@ class db {
         $this->prfx = $db_prfx;
         $this->db_table = $db_table;
         $this->data_table = $data_table;
+        $this->data_table_month = $data_table_month;
     }
 
     function close() {
@@ -34,7 +35,7 @@ class db {
             $sensors_selector .= "sensor_id = {$sensor} OR ";
         }
         $sensors_selector = substr($sensors_selector, 0, -4);
-        $result = $this->db->query("SELECT sensor_id, timestamp, pm10 from {$this->data_table} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and ({$sensors_selector});");
+        $result = $this->db->query("SELECT sensor_id, timestamp, pm10 from {$this->data_table_month} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and ({$sensors_selector});");
         return $result;
     }
 

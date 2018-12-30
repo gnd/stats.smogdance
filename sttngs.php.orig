@@ -8,5 +8,6 @@ $db_pass = "";
 $db_prfx = "";
 $db_table = "";
 $data_table = "";
+$data_table_month = "";
 
 ?>
