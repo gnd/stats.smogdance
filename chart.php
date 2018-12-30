@@ -27,86 +27,273 @@ function validate_str($input, $link) {
     return mysqli_real_escape_string($link, $input);
 }
 
+// substance concentration thresholds in air (usually mg/m3)
+$thresholds['so2'] = [0, 125, 350, 500, 800];		    # http://ec.europa.eu/environment/air/quality/standards.htm
+$thresholds['o3'] = [0, 50, 100, 150, 200, 300];       # saved in smogdance local
+$thresholds['pm10'] = [0, 55, 155, 255, 355];          # ??
+$thresholds['pm25'] = [0, 15, 40, 65, 150];            # ??
+$thresholds['co'] = [0, 10000, 20000, 30000, 40000];   # http://ec.europa.eu/environment/air/quality/standards.htm
+$thresholds['no2'] = [0, 100, 150, 200, 300];          # http://ec.europa.eu/environment/air/quality/standards.htm
+
 
 include "db_class.php";
 $mydb = new db();
 $mydb->connect();
+$nodata = False;
+$city_chart = False;
 
-if (isset($_REQUEST["id"]) && $_REQUEST["id"] != "") {
-    $sensor_id = validate_int($mydb->link,$_REQUEST["id"]);
+
+/**
+ * Prepares sensor data for a given substance for the last 30 days
+ *
+ * @param integer $id sensor id
+ * @return string $chart_data data for chart.js
+ */
+if (isset($_REQUEST["id"]) && ($_REQUEST["id"] != "")) {
+    $sensor_id = validate_int($_REQUEST["id"], $mydb->db);
 
     // Get sensor info
-    $data = $mydb->getSensorInfo($sensor_id);
-    $line = mysqli_fetch_array($data)
-    $city_name = $line[0];
-    $sensor_name = $line[1];
+    $res = $mydb->getSensorInfo($sensor_id);
+    $sensor_data = mysqli_fetch_array($res);
+    $city_name = $sensor_data[0];
+    $sensor_name = $sensor_data[1];
     $substance = "pm10";
 
     // Get sensor data and the max value for the last 30 days
     $points = [];
     $max_point = 0;
-    $data = $mydb->getLastMonthData($sensor_id);
-    while ($line = mysqli_fetch_array($data)) {
-        $points[] = $line;
-        if ($max_point < $line[1]) {
-            $max_point = $line[1];
+    $res = $mydb->getLastMonthData($sensor_id);
+    if ($res->num_rows > 1) {
+        while ($line = mysqli_fetch_array($res)) {
+            $points[] = $line;
+            if ($max_point < $line[1]) {
+                $max_point = $line[1];
+            }
         }
-    }
 
-    // Compute chart_max
-    $chart_max = (floor($max_point / 10) + 2)  * 10;
+        // Compute chart_max
+        $chart_max = (floor($max_point / 10) + 2)  * 10;
+
+        // create chart labels for js
+        $labels = "";
+        foreach ($points as $point) {
+            $labels .= "\t\t\t\t'" . $point[0] . "',\n";
+        }
+        $labels = substr($labels, 0, -2); // remove last colon
+        $chart_data = "{ labels: [\n {$labels} ],";
+        $chart_data .= "\n\t\tdatasets: [ { \n\t\t\tlabel: ' {$substance} - full',";
+
+        // create chart data for js
+        $data = "";
+        foreach ($points as $point) {
+            if ($point[1] != "") {
+                $data .= $point[1] . ",";
+            } else {
+                $data .= "'',";
+            }
+        }
+        $data = substr($data, 0, -2); // remove last colon
+        $chart_data .= "\n\t\t\tdata: [ {$data} ],\n";
+        $chart_data .= "\t\t\tspanGaps: true,\n";
+        $chart_data .= "\t\t\tborderWidth: 1,\n";
+        $chart_data .= "\t\t\tborderColor: grd,\n";
+        $chart_data .= "\t\t\tpointStyle: 'cross',\n";
+        $chart_data .= "\t\t\tpointBackgroundColor: 'rgb(0,0,0)',\n";
+        $chart_data .= "\t\t\tpointBorderColor: 'rgb(0,0,0)',\n";
+        $chart_data .= "\t\t\tbackgroundColor: grd,\n";
+        $chart_data .= "\t\t\ttension: 0.6\n";
+        $chart_data .= "\t\t}\n\t]\n}";
+
+        // send appropriate threshold to js
+        $chart_thresholds = $thresholds[$substance];
+    } else {
+        $nodata = True;
+    }
 }
 
-$thresholds = [];
-switch ($substance){
-    case 'so2':
-        $thresholds = [0, 125, 350, 500, 800];		    # http://ec.europa.eu/environment/air/quality/standards.htm
-        break;
-    case 'o3':
-        $thresholds = [0, 50, 100, 150, 200, 300];       # saved in smogdance local
-        break;
-    case 'pm10':
-        $thresholds = [0, 55, 155, 255, 355];          # ??
-        break;
-    case 'pm25':
-        $thresholds = [0, 15, 40, 65, 150];            # ??
-        break;
-    case 'co':
-        $thresholds = [0, 10000, 20000, 30000, 40000];   # http://ec.europa.eu/environment/air/quality/standards.htm
-        break;
-    case 'no2':
-        $thresholds = [0, 100, 150, 200, 300];          # http://ec.europa.eu/environment/air/quality/standards.htm
-        break;
+
+/**
+ * Interleaves sensor data for a given substance
+ * for all sensors form a given cityfor the last 30 days
+ *
+ * This is problematic for several reasons - sensors from the same city
+ * might run at slightly different times, so we take measurement timestamps
+ * of the first sensor and try to see if the other sensors have measurements taken
+ * at a simillar time (+- 5m). If yes we pretend they were measured at the same time
+ * and add them to the output, otherwise we discard the data
+ *
+ * There is still a problem with different lengths of the arrays .. TODO later
+ *
+ * @param string $city city name
+ * @return string $chart_data data for chart.js
+ */
+if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
+    $city_chart = True;
+    $city = validate_str($_REQUEST["city"], $mydb->db);
+
+    // Get data for all sensors from city
+    $first = True;
+    $first_id = 0;
+    $max_point = 0;
+    $sensor_ids = [];
+    $sensor_indexes = [];
+    $sensor_timestamps = [];
+    $sensor_data = array();
+    $sensor_data_temp = [];
+    $sensor_names = [];
+    $substance = "pm10";
+    $res = $mydb->getCitySensors($city);
+    if ($res->num_rows > 1) {
+
+        // FIll arrays first
+        while ($sensor_desc = mysqli_fetch_array($res)) {
+            $sensor_ids[] = $sensor_desc[0];
+            $sensor_indexes[$sensor_desc[0]] = 0;
+            $sensor_data[$sensor_desc[0]] = array();
+            if ($first) {
+                $first_id = $sensor_desc[0];
+                $first = False;
+            }
+            $sensor_names[$sensor_desc[0]] = $sensor_desc[1];
+            $data = $mydb->getLastMonthData($sensor_desc[0]);
+            while ($line = mysqli_fetch_array($data)) {
+                $sensor_data_temp[$sensor_desc[0]][] = $line;
+                if ($line[1] > $max_point) {
+                    $max_point = $line[1];
+                }
+            }
+        }
+
+        // Process unprecise timestamp data for all sensors from city
+        $sensor_count = sizeof($sensor_ids);
+        foreach ($sensor_data_temp[$first_id] as $line) {
+            $sensor_timestamps[] = $line[0];
+            $sensor_data[$first_id][] = $line[1];
+            $first_time = strtotime($line[0]);
+            //echo "\n\nInitial data: {$line[0]}, {$line[1]}";
+            foreach ($sensor_ids as $sensor_id) {
+                if ($sensor_id != $first_id) {
+                    //echo "\nDoing {$sensor_names[$sensor_id]}";
+                    $this_time = strtotime($sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][0]);
+                    // If timestamp close to the first_time timestamp
+                    $time_diff = round(($first_time - $this_time)/60,2);
+                    if (abs($time_diff) < 7) {
+                        //echo " fits! (first: {$first_time} this: {$this_time} diff: {$time_diff})";
+                        $new_index = $sensor_indexes[$sensor_id] + 1;
+                        //echo "\n Increasing index for sensor {$sensor_id} to {$new_index}";
+                        //echo "\n Going to store '{$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1]}' into {$sensor_id}\n";
+                        $sensor_data[$sensor_id][] = (int)$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1];
+                        $sensor_indexes[$sensor_id] = $sensor_indexes[$sensor_id] + 1;
+                    } else {
+                        //echo " doesnt! (first: {$first_time} this: {$this_time} diff: {$time_diff})";
+                        if ($time_diff > 0) {
+                            //echo "\n Main sensor too much in the future. Increasing index for sensor {$sensor_id} to {$new_index} to catch up";
+                            $new_index = $sensor_indexes[$sensor_id] + 1;
+                            $this_time = strtotime($sensor_data_temp[$sensor_id][$new_index][0]);
+                            $time_diff = round(($first_time - $this_time)/60,2);
+                            //echo "\n Checking {$sensor_names[$sensor_id]} again: ";
+                            if (abs($time_diff) < 7) {
+                                //echo " fits! (first: {$first_time} this: {$this_time}) diff: {$time_diff})";
+                                $sensor_data[$sensor_id][] = (int)$sensor_data_temp[$sensor_id][$new_index][1];
+                                $new_index = $sensor_indexes[$sensor_id] + 1;
+                                //echo "\n Increasing index for sensor {$sensor_id} to {$new_index}";
+                                $sensor_indexes[$sensor_id] = $new_index;
+                            } else {
+                                //echo " doesnt! (first: {$first_time} this: {$this_time} diff: {$time_diff})";
+                                $sensor_indexes[$sensor_id] = $new_index;
+                                $sensor_data[$sensor_id][] = '';
+                            }
+                        } else {
+                            $sensor_data[$sensor_id][] = '';
+                        }
+                    }
+                }
+            }
+        }
+
+        // create chart labels for js
+        $labels = "";
+        foreach ($sensor_timestamps as $timestamp) {
+            $labels .= "\t\t\t\t'" . $timestamp . "',\n";
+        }
+        $labels = substr($labels, 0, -1); // remove last colon
+        $chart_data = "{ labels: [\n {$labels} ],";
+
+        // fill out datasets
+        $chart_data .= "\n\t\tdatasets: [\n";
+        $i = 0;
+        foreach ($sensor_ids as $sensor_id) {
+            $chart_data .= "{ \n\t\t\tlabel: '{$sensor_names[$sensor_id]}',";
+            $data = implode(",", $sensor_data[$sensor_id]);
+            $data = substr($data, 0, -2); // remove last colon
+            $chart_data .= "\n\t\t\tdata: [ {$data} ],\n";
+            $chart_data .= "\t\t\tspanGaps: true,\n";
+            $chart_data .= "\t\t\tborderWidth: 1,\n";
+            $chart_data .= "\t\t\tborderColor: '#' + pal[{$i}],\n";
+            $chart_data .= "\t\t\tpointStyle: 'cross',\n";
+            $chart_data .= "\t\t\tpointBackgroundColor: 'rgb(0,0,0)',\n";
+            $chart_data .= "\t\t\tpointBorderColor: 'rgb(0,0,0)',\n";
+            $chart_data .= "\t\t\tbackgroundColor: 'rgba(255,255,255,0)',\n";
+            $chart_data .= "\t\t\ttension: 0.6\n";
+            $chart_data .= "},";
+            $i++;
+        }
+        $chart_data = substr($chart_data, 0, -1)  . "\n]\n}";
+
+        // Compute chart_max
+        $chart_max = (floor($max_point / 10) + 2)  * 10;
+
+        // send appropriate threshold to js
+        $chart_thresholds = $thresholds[$substance];
+    } else {
+        $nodata = True;
+    }
 }
 
 ?>
-
 <html>
 <head>
 <title>
     <?php
-        echo $substance . " - " . $sensor_name . ", " . $city_name;
+        if ($nodata) {
+            echo "smog.dance / no data\n";
+        } else {
+            if ($city_chart) {
+                echo "smog.dance / {$city} sensors - {$substance}\n";
+            } else {
+                echo "smog.dance / {$sensor_name} , {$city_name} - {$substance}\n";
+            }
+        }
     ?>
 </title>
 
 <!-- MOMENT.JS -->
-<script src="moment.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.23.0/moment.min.js"></script>
 
 <!-- CHART.JS -->
-<script src="Chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.min.js"></script>
+
+<!-- PALETTE.JS -->
+<script src="palette.js"></script>
 
 </head>
 <body>
-    <div class="chart-container" style="position: relative; height:90%; width:90%">
-        <canvas id="full"></canvas>
-    </div>
-    <br/>
+    <?php
+        if ($nodata) {
+            echo "No data for given sensor";
+        } else {
+            echo '<div class="chart-container" style="position: relative; height:90%; width:90%">' . "\n";
+            echo "\t\t" . '<canvas id="full"></canvas>' . "\n";
+            echo "\t" . '</div>' . "\n";
+            echo "\t" . '<br/>' . "\n";
+        }
+    ?>
 </body>
 <script>
     var full = document.getElementById("full").getContext('2d');
     var graph_height = window.innerHeight * 0.9;
     var chart_max = <?php echo $chart_max; ?>;
-    var thresholds = <?php echo "[".implode(",", $thresholds)."]"; ?>;
+    var thresholds = <?php echo "[".implode(",", $chart_thresholds)."]"; ?>;
     var grd = full.createLinearGradient(0, graph_height,  0,  0);
     grd.addColorStop(0, '#9eec80');
     if ((thresholds[1] / chart_max) < 1) {
@@ -122,44 +309,12 @@ switch ($substance){
         grd.addColorStop((thresholds[4] / chart_max), '#e50883');
     }
 
+    // generate palette
+    var pal = palette('mpn65', <?php echo sizeof($sensor_ids); ?>);
+
     var myChart = new Chart(full, {
         type: 'line',
-        data: {
-            labels: [   <?php
-                            $data = "";
-                            foreach ($points as $point) {
-                                $data .= "'" . $point[0] . "',\n";
-                            }
-                            echo substr($data, 0, -2); // remove last colon
-                        ?>
-
-                    ],
-            datasets: [ {
-                label: '<?php
-                            echo $substance . " - full";
-                        ?>',
-                data: [ <?php
-                    $data = "";
-                            foreach ($points as $point) {
-                                if ($point[1] != "") {
-                                    $data .= $point[1] . ",";
-                                } else {
-                                    $data .= "'',";
-                                }
-                            }
-                            echo substr($data, 0, -2); // remove last colon
-                        ?> ],
-                spanGaps: true,
-                borderWidth: 1,
-                borderColor: grd,
-                pointStyle: 'cross',
-                pointBackgroundColor: 'rgb(0,0,0)',
-                pointBorderColor: 'rgb(0,0,0)',
-                backgroundColor: grd,
-                tension: 0.6
-                }
-            ]
-        },
+        data: <?php echo $chart_data; ?>,
         options: {
             scales: {
                 xAxes: [{
