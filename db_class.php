@@ -14,10 +14,23 @@ class db {
         $this->db->close();
     }
 
+    function getCitySensors($city) {
+        $result = $this->db->query($kak = "SELECT id, name FROM sensors WHERE city = '" . $city . "';");
+        return $result;
+    }
+
     function getLastMonthData($sensor_id) {
         $result = $this->db->query("SELECT timestamp, pm10 from sensor_data WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and sensor_id = " . $sensor_id . ";");
-        //$result = $this->db->query("select timestamp, pm10 from sensor_data where sensor_id = 286 and timestamp > '2018-08-16 16:32:52' and timestamp < '2018-09-15 16:32:57';");
-        //var_dump($kak);
+        return $result;
+    }
+
+    function getLastMonthDataForSensors($sensors) {
+        $sensors_selector = "";
+        foreach ($sensors as $sensor) {
+            $sensors_selector .= "sensor_id = {$sensor} OR ";
+        }
+        $sensors_selector = substr($sensors_selector, 0, -4);
+        $result = $this->db->query("SELECT sensor_id, timestamp, pm10 from sensor_data WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and ({$sensors_selector});");
         return $result;
     }
 

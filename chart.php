@@ -50,6 +50,7 @@ $city_chart = False;
  * @return string $chart_data data for chart.js
  */
 if (isset($_REQUEST["id"]) && ($_REQUEST["id"] != "")) {
+    $time_start = microtime(true);
     $sensor_id = validate_int($_REQUEST["id"], $mydb->db);
 
     // Get sensor info
@@ -128,6 +129,7 @@ if (isset($_REQUEST["id"]) && ($_REQUEST["id"] != "")) {
  * @return string $chart_data data for chart.js
  */
 if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
+    $time_start = microtime(true);
     $city_chart = True;
     $city = validate_str($_REQUEST["city"], $mydb->db);
 
@@ -135,17 +137,23 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     $first = True;
     $first_id = 0;
     $max_point = 0;
-    $sensor_ids = [];
-    $sensor_indexes = [];
-    $sensor_timestamps = [];
+    $sensor_ids = array();
+    $sensor_indexes = array();
+    $sensor_timestamps = array();
     $sensor_data = array();
-    $sensor_data_temp = [];
-    $sensor_names = [];
+    $sensor_data_temp = array();
+    $sensor_names = array();
     $substance = "pm10";
     $res = $mydb->getCitySensors($city);
+    //$time_mid = microtime(true);
+    //echo "\nReceived city sensors: " . strval($time_mid - $time_start);
     if ($res->num_rows > 1) {
 
         // FIll arrays first
+        //$time_mid = microtime(true);
+        //echo "\nStarting array filling: " . strval($time_mid - $time_start);
+
+        // Get sensor ids
         while ($sensor_desc = mysqli_fetch_array($res)) {
             $sensor_ids[] = $sensor_desc[0];
             $sensor_indexes[$sensor_desc[0]] = 0;
@@ -155,16 +163,24 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                 $first = False;
             }
             $sensor_names[$sensor_desc[0]] = $sensor_desc[1];
-            $data = $mydb->getLastMonthData($sensor_desc[0]);
-            while ($line = mysqli_fetch_array($data)) {
-                $sensor_data_temp[$sensor_desc[0]][] = $line;
-                if ($line[1] > $max_point) {
-                    $max_point = $line[1];
-                }
+        }
+        //$time_mid = microtime(true);
+        //echo "\nStarting array filling: " . strval($time_mid - $time_start);
+        // Get data for all sensor ids
+        $data = $mydb->getLastMonthDataForSensors($sensor_ids);
+        while ($line = mysqli_fetch_array($data)) {
+            $sensor_data_temp[$line[0]][] = array($line[1], $line[2]);
+            if ($line[2] > $max_point) {
+                $max_point = $line[2];
             }
         }
 
+        //$time_mid = microtime(true);
+        //echo "\nEnded array filling: " . strval($time_mid - $time_start);
+
         // Process unprecise timestamp data for all sensors from city
+        //$time_mid = microtime(true);
+        //echo "\nStarting array processing: " . strval($time_mid - $time_start);
         $sensor_count = sizeof($sensor_ids);
         foreach ($sensor_data_temp[$first_id] as $line) {
             $sensor_timestamps[] = $line[0];
@@ -213,8 +229,12 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                 }
             }
         }
+        //$time_mid = microtime(true);
+        //echo "\nEnded array processing: " . strval($time_mid - $time_start);
 
         // create chart labels for js
+        //$time_mid = microtime(true);
+        //echo "\nStarting chart data: " . strval($time_mid - $time_start);
         $labels = "";
         foreach ($sensor_timestamps as $timestamp) {
             $labels .= "\t\t\t\t'" . $timestamp . "',\n";
@@ -248,6 +268,8 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
 
         // send appropriate threshold to js
         $chart_thresholds = $thresholds[$substance];
+        //$time_mid = microtime(true);
+        //echo "\nEnded chart data: " . strval($time_mid - $time_start);
     } else {
         $nodata = True;
     }
@@ -335,4 +357,8 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         }
     });
 </script>
+<?php
+$time_mid = microtime(true);
+echo "<p style=\"font-size: 11px; position: absolute; bottom: 1%; left: 1%;\">Generated in: " . strval($time_mid - $time_start) . " sec. Back to <a href=\"https://stats.smog.dance\" style=\"color: black;\">stats.smog.dance</a></p>";
+?>
 </html>
