@@ -25,7 +25,7 @@ class db {
     }
 
     function getLastMonthData($sensor_id) {
-        $result = $this->db->query("SELECT timestamp, pm10 from {$this->data_table} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and sensor_id = " . $sensor_id . ";");
+        $result = $this->db->query("SELECT timestamp, pm10 from {$this->data_table_month} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and sensor_id = " . $sensor_id . ";");
         return $result;
     }
 
