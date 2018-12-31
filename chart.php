@@ -326,7 +326,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                 echo "smog.dance / {$city} sensors - {$city_substances[0]}\n";
                 $city = ucfirst($city);
                 $substance = strtoupper($city_substances[0]);
-                $chart_title = "{$city} - {$city_substances[0]} (last 30 days)";
+                $chart_title = "{$city} - {$substance} (last 30 days)";
             } else {
                 echo "smog.dance / {$sensor_name}, {$city} - {$city_substances[0]}\n";
                 $city = ucfirst($city);
@@ -387,6 +387,24 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     // create data_array
     <?php echo $data_array; ?>
 
+    // create a legendCallback - see: https://github.com/chartjs/Chart.js/issues/2565
+    function legendcallback(chart) {
+        var legendHtml = [];
+        legendHtml.push('<table>');
+        legendHtml.push('<tr>');
+        for (var i=0; i<chart.data.datasets.length; i++) {
+            legendHtml.push('<td><div class="chart-legend" style="background-color:' + chart.data.datasets[i].backgroundColor + '"></div></td>');
+            if (chart.data.datasets[i].label) {
+                legendHtml.push(
+                    '<td class="chart-legend-label-text" onclick="updateDataset(event, ' + '\'' + chart.legend.legendItems[i].datasetIndex + '\'' + ')">'
+                     + chart.data.datasets[i].label + '</td>');
+            }
+        }
+        legendHtml.push('</tr>');
+        legendHtml.push('</table>');
+        return legendHtml.join("");
+    }
+
     var myChart = new Chart(full, {
         type: 'line',
         data: <?php echo $chart_data; ?>,
@@ -404,9 +422,14 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                 }],
                 yAxes: [{
                     ticks: {
+                        min: 0,
                         max: chart_max[<?php echo "'{$city_substances[0]}'"; ?>]
                     }
                 }]
+            },
+            legendCallback: legendcallback,
+            legend: {
+                display: true
             }
         }
     });
