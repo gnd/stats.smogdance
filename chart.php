@@ -137,58 +137,69 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     // Get data for all sensors from city
     $first = True;
     $first_id = 0;
-    $max_point = 0;
+    $max_point = array();
     $sensor_ids = array();
     $sensor_indexes = array();
     $sensor_timestamps = array();
+    $sensor_substances = array();
     $sensor_data = array();
     $sensor_data_temp = array();
     $sensor_names = array();
-    $substance = "pm10";
+    $city_substances = array();
     $res = $mydb->getCitySensors($city);
-    //$time_mid = microtime(true);
-    //echo "\nReceived city sensors: " . strval($time_mid - $time_start);
+
     if ($res->num_rows > 1) {
-
-        // FIll arrays first
-        //$time_mid = microtime(true);
-        //echo "\nStarting array filling: " . strval($time_mid - $time_start);
-
-        // Get sensor ids
+        // Get sensor ids, names and substances
         while ($sensor_desc = mysqli_fetch_array($res)) {
-            $sensor_ids[] = $sensor_desc[0];
-            $sensor_indexes[$sensor_desc[0]] = 0;
-            $sensor_data[$sensor_desc[0]] = array();
+            $sensor_id = $sensor_desc[0];
+            $sensor_ids[] = $sensor_id;
+            $sensor_indexes[$sensor_id] = 0;
+            $sensor_data[$sensor_id] = array();
             if ($first) {
-                $first_id = $sensor_desc[0];
+                $first_id = $sensor_id;
                 $first = False;
             }
-            $sensor_names[$sensor_desc[0]] = $sensor_desc[1];
-        }
-        //$time_mid = microtime(true);
-        //echo "\nStarting array filling: " . strval($time_mid - $time_start);
-        // Get data for all sensor ids
-        $data = $mydb->getLastMonthDataForSensors($sensor_ids);
-        while ($line = mysqli_fetch_array($data)) {
-            $sensor_data_temp[$line[0]][] = array($line[1], $line[2]);
-            if ($line[2] > $max_point) {
-                $max_point = $line[2];
+            $sensor_names[$sensor_id] = $sensor_desc[1];
+            $sensor_substances_tmp = explode(" ",$sensor_desc[2]);
+            sort($sensor_substances_tmp);
+            $sensor_substances[$sensor_id] = $sensor_substances_tmp;
+            // build a list of all substances for a given city
+            foreach ($sensor_substances_tmp as $substance) {
+                if (!in_array($substance,$city_substances)) {
+                    $city_substances[] = $substance;
+                    // initialize max_point for each substance
+                    $max_point[$substance] = 0;
+                }
             }
         }
+        sort($city_substances);
 
-        //$time_mid = microtime(true);
-        //echo "\nEnded array filling: " . strval($time_mid - $time_start);
+        // Get data for all sensor ids
+        $i = 0;
+        $data = $mydb->getLastMonthDataForSensors($sensor_ids, $city_substances);
+        while ($line = mysqli_fetch_array($data, MYSQLI_ASSOC)) {
+            $substance_data = array();
+            // create an assoc array with all substance data for a given timestamp
+            foreach ($sensor_substances[$line['sensor_id']] as $substance) {
+                    $substance_data[$substance] = $line[$substance];
+                    // search for maximum for each substance
+                    if ($line[$substance] > $max_point[$substance]) {
+                        $max_point[$substance] = $line[$substance];
+                    }
+            }
+            $sensor_data_temp[$line['sensor_id']][] = array($line['timestamp'], $substance_data);
+        }
 
         // Process unprecise timestamp data for all sensors from city
-        //$time_mid = microtime(true);
-        //echo "\nStarting array processing: " . strval($time_mid - $time_start);
         $sensor_count = sizeof($sensor_ids);
         foreach ($sensor_data_temp[$first_id] as $line) {
             $sensor_timestamps[] = $line[0];
-            if ($line[1] == 0) {
-                $sensor_data[$first_id][] = '';
-            } else {
-                $sensor_data[$first_id][] = $line[1];
+            foreach ($sensor_substances[$sensor_id] as $substance) {
+                if ($line[1][$substance] == 0) {
+                    $sensor_data[$first_id][$substance][] = '';
+                } else {
+                    $sensor_data[$first_id][$substance][] = $line[1][$substance];
+                }
             }
             $first_time = strtotime($line[0]);
             foreach ($sensor_ids as $sensor_id) {
@@ -199,32 +210,46 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                     if (abs($time_diff) < 7) {
                         $new_index = $sensor_indexes[$sensor_id] + 1;
                         $sensor_indexes[$sensor_id] = $sensor_indexes[$sensor_id] + 1;
-                        $datapoint = (int)$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1];
-                        if ($datapoint == 0) {
-                            $sensor_data[$sensor_id][] = '';
-                        } else {
-                            $sensor_data[$sensor_id][] = $datapoint;
+                        foreach ($sensor_substances[$sensor_id] as $substance) {
+                            $datapoint = (int)$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1][$substance];
+                            if ($datapoint == 0) {
+                                $sensor_data[$sensor_id][$substance][] = '';
+                            } else {
+                                $sensor_data[$sensor_id][$substance][] = $datapoint;
+                            }
                         }
+                    // If the data from the other sensor is not timestampe within +-7 minutes
                     } else {
+                        // But we see that other sensor's timstamped data is in the past against the first sensors data
                         if ($time_diff > 0) {
+                            // We try to check the next data entry for the other sensor
                             $new_index = $sensor_indexes[$sensor_id] + 1;
                             $this_time = strtotime($sensor_data_temp[$sensor_id][$new_index][0]);
                             $time_diff = round(($first_time - $this_time)/60,2);
+                            // If we find its within +-7 minutes we store it
                             if (abs($time_diff) < 7) {
-                                $datapoint = (int)$sensor_data_temp[$sensor_id][$new_index][1];
-                                if ($datapoint == 0) {
-                                        $sensor_data[$sensor_id][] = '';
-                                } else {
-                                    $sensor_data[$sensor_id][] = $datapoint;
+                                foreach ($sensor_substances[$sensor_id] as $substance) {
+                                    $datapoint = (int)$sensor_data_temp[$sensor_id][$new_index][1][$substance];
+                                    if ($datapoint == 0) {
+                                            $sensor_data[$sensor_id][$substance][] = '';
+                                    } else {
+                                        $sensor_data[$sensor_id][$substance][] = $datapoint;
+                                    }
                                 }
                                 $new_index = $sensor_indexes[$sensor_id] + 1;
                                 $sensor_indexes[$sensor_id] = $new_index;
+                            // Otherwise we raise the index for the other sensor and store nothing
                             } else {
                                 $sensor_indexes[$sensor_id] = $new_index;
-                                $sensor_data[$sensor_id][] = '';
+                                foreach ($sensor_substances[$sensor_id] as $substance) {
+                                    $sensor_data[$sensor_id][$substance][] = '';
+                                }
                             }
+                        // If it is in the future, we keep the index as it is and store nothing for the current timestamp
                         } else {
-                            $sensor_data[$sensor_id][] = '';
+                            foreach ($sensor_substances[$sensor_id] as $substance) {
+                                $sensor_data[$sensor_id][$substance][] = '';
+                            }
                         }
                     }
                 }
@@ -234,8 +259,6 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         //echo "\nEnded array processing: " . strval($time_mid - $time_start);
 
         // create chart labels for js
-        //$time_mid = microtime(true);
-        //echo "\nStarting chart data: " . strval($time_mid - $time_start);
         $labels = "";
         foreach ($sensor_timestamps as $timestamp) {
             $labels .= "\t\t\t\t'" . $timestamp . "',\n";
@@ -244,31 +267,46 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         $chart_data = "{ labels: [\n {$labels} ],";
 
         // fill out datasets
+        $data_array = "var data_array = {};\n";
         $chart_data .= "\n\t\tdatasets: [\n";
         $i = 0;
         foreach ($sensor_ids as $sensor_id) {
-            $chart_data .= "{ \n\t\t\tlabel: '{$sensor_names[$sensor_id]}',";
-            $data = implode(",", $sensor_data[$sensor_id]);
-            $data = substr($data, 0, -2); // remove last colon
-            $chart_data .= "\n\t\t\tdata: [ {$data} ],\n";
+
+            // fill the data_array
+            $data_array .= "\n\t// create data_array[{$sensor_id}]\n";
+            $data_array .= "\tdata_array[{$sensor_id}] = {};\n";
+            foreach ($sensor_substances[$sensor_id] as $substance) {
+                $data = implode(",", $sensor_data[$sensor_id][$substance]);
+                $data = substr($data, 0, -2); // remove last colon
+                $data_array .= "\n\t// data for sensor id {$sensor_id} ({$sensor_names[$sensor_id]}) - substance {$substance}\n";
+                $data_array .= "\tdata_array[{$sensor_id}]['{$substance}'] = [{$data}];\n";
+            }
+
+            // prepare the chartjs data
+            $chart_data .= "{ \n\t\t\tlabel: '{$sensor_names[$sensor_id]} (id: {$sensor_id})',";
+            $chart_data .= "\n\t\t\tdata: data_array[{$sensor_id}]['{$city_substances[0]}'],\n";
             $chart_data .= "\t\t\tspanGaps: true,\n";
             $chart_data .= "\t\t\tborderWidth: 1,\n";
             $chart_data .= "\t\t\tborderColor: '#' + pal[{$i}],\n";
             $chart_data .= "\t\t\tpointStyle: 'cross',\n";
             $chart_data .= "\t\t\tpointBackgroundColor: 'rgb(0,0,0,0.2)',\n";
             $chart_data .= "\t\t\tpointBorderColor: 'rgb(0,0,0,0.2)',\n";
-            $chart_data .= "\t\t\tbackgroundColor: 'rgba(255,255,255,0)',\n";
+            $chart_data .= "\t\t\tbackgroundColor: hexToRGBA('#' + pal[{$i}], 0),\n";
             $chart_data .= "\t\t\ttension: 0.6\n";
             $chart_data .= "},";
             $i++;
         }
         $chart_data = substr($chart_data, 0, -1)  . "\n]\n}";
 
-        // Compute chart_max
-        $chart_max = (floor($max_point / 10) + 2)  * 10;
+        // Compute chart_max for each substance
+        $chart_max_data = "var chart_max = {};\n";
+        foreach ($sensor_substances[$sensor_id] as $substance) {
+            $chart_max[$substance] = (floor($max_point[$substance] / 10) + 2)  * 10;
+            $chart_max_data .= "\tchart_max['{$substance}'] = {$chart_max[$substance]};\n";
+        }
 
-        // send appropriate threshold to js
-        $chart_thresholds = $thresholds[$substance];
+        // send appropriate threshold to js - TODO - this has to be done in JS
+        $chart_thresholds = $thresholds[$city_substances[0]];
         //$time_mid = microtime(true);
         //echo "\nEnded chart data: " . strval($time_mid - $time_start);
     } else {
@@ -285,25 +323,25 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             echo "smog.dance / no data\n";
         } else {
             if ($city_chart) {
-                echo "smog.dance / {$city} sensors - {$substance}\n";
+                echo "smog.dance / {$city} sensors - {$city_substances[0]}\n";
                 $city = ucfirst($city);
-                $substance = strtoupper($substance);
+                $substance = strtoupper($city_substances[0]);
                 $chart_title = "{$city} - {$substance} (last 30 days)";
             } else {
-                echo "smog.dance / {$sensor_name}, {$city} - {$substance}\n";
+                echo "smog.dance / {$sensor_name}, {$city} - {$city_substances[0]}\n";
                 $city = ucfirst($city);
-                $substance = strtoupper($substance);
-                $chart_title = "{$sensor_name}, {$city} - {$substance}";
+                $substance = strtoupper($city_substances[0]);
+                $chart_title = "{$sensor_name}, {$city} - {$city_substances[0]}";
             }
         }
     ?>
 </title>
 
 <!-- MOMENT.JS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.23.0/moment.min.js"></script>
+<script src="moment.js"></script>
 
 <!-- CHART.JS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.min.js"></script>
+<script src="Chart.min.js"></script>
 
 <!-- PALETTE.JS -->
 <script src="palette.js"></script>
@@ -314,17 +352,78 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         if ($nodata) {
             echo "No data for given sensor";
         } else {
-            echo '<div class="chart-container" style="position: relative; height:90%; width:90%">' . "\n";
+            echo '<div class="chart-container" style="position: relative; width:87%; height:87%;">' . "\n";
             echo "\t\t" . '<canvas id="full"></canvas>' . "\n";
             echo "\t" . '</div>' . "\n";
-            echo "\t" . '<br/>' . "\n";
+            echo "\t" . '<br/><br/><br/>' . "\n";
         }
+        echo "<div style=\"padding-left: 1%;\">Substances available for {$city} (click): \n";
+        $i = 0;
+        foreach ($city_substances as $substance) {
+            if ($i == 0) {
+                echo "<button id='{$substance}' style=\"width: 50px; height: 20px; background-color: gold; border: 0px;\" onclick=\"change_substance('{$substance}');\">{$substance}</button>\n";
+                $i++;
+            } else {
+                echo "<button id='{$substance}' style=\"width: 50px; height: 20px; background-color: yellow; border: 0px;\" onclick=\"change_substance('{$substance}');\">{$substance}</button>\n";
+            }
+            echo "&nbsp;\n";
+        }
+        echo "</div>\n";
     ?>
 </body>
 <script>
+    // city name
+    var city_name = '<?php echo $city; ?>';
+
+    // sensor ids
+    var sensor_ids = [<?php echo implode(",", $sensor_ids); ?>];
+
+    // city_substances
+    var city_substances = [<?php echo "'" . implode("','", $city_substances) . "'"; ?>];
+
+    // create data_array
+    <?php echo $data_array; ?>
+
+    // HEX 2 RGB - taken from
+    function hexToR(h) {return parseInt((cutHex(h)).substring(0,2),16)}
+    function hexToG(h) {return parseInt((cutHex(h)).substring(2,4),16)}
+    function hexToB(h) {return parseInt((cutHex(h)).substring(4,6),16)}
+    function cutHex(h) {return (h.charAt(0)=="#") ? h.substring(1,7):h}
+    function hexToRGBA(h, alpha) {
+        return "rgba(" + hexToR(h) + "," + hexToG(h) + "," + hexToB(h) + "," + alpha + ")";
+    }
+
+    function change_substance(substance) {
+        for (var i=0; i< window.myChart.data.datasets.length; i++) {
+            var sensor_id = sensor_ids[i];
+            if (data_array[sensor_id][substance]) {
+                window.myChart.data.datasets[i].data = data_array[sensor_id][substance];
+            } else {
+                window.myChart.data.datasets[i].data = [];
+            }
+        }
+        // change the chart title
+        window.myChart.options.title.text = city_name + " " + substance.toUpperCase() + " (last 30 days)";
+        // change active button color
+        for (var i=0; i< city_substances.length; i++) {
+            if (city_substances[i] == substance) {
+                document.getElementById(city_substances[i]).style.backgroundColor = 'gold';
+            } else {
+                document.getElementById(city_substances[i]).style.backgroundColor = 'yellow';
+            }
+        }
+        // change max chart values
+        window.myChart.options.scales.yAxes[0].ticks.max = chart_max[substance];
+
+        // update chart
+        window.myChart.update();
+    }
+
     var full = document.getElementById("full").getContext('2d');
     var graph_height = window.innerHeight * 0.9;
-    var chart_max = <?php echo $chart_max; ?>;
+
+    // these are the maximum values for all substances
+    <?php echo $chart_max_data; ?>;
     var thresholds = <?php echo "[".implode(",", $chart_thresholds)."]"; ?>;
     var grd = full.createLinearGradient(0, graph_height,  0,  0);
     grd.addColorStop(0, '#9eec80');
@@ -344,7 +443,25 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     // generate palette
     var pal = palette('mpn65', <?php echo sizeof($sensor_ids); ?>);
 
-    var myChart = new Chart(full, {
+    // create a legendCallback - see: https://github.com/chartjs/Chart.js/issues/2565
+    function legendcallback(chart) {
+        var legendHtml = [];
+        legendHtml.push('<table>');
+        legendHtml.push('<tr>');
+        for (var i=0; i<chart.data.datasets.length; i++) {
+            legendHtml.push('<td><div class="chart-legend" style="background-color:' + chart.data.datasets[i].borderColor + '"></div></td>');
+            if (chart.data.datasets[i].label) {
+                legendHtml.push(
+                    '<td class="chart-legend-label-text" onclick="updateDataset(event, ' + '\'' + chart.legend.legendItems[i].datasetIndex + '\'' + ')">'
+                     + chart.data.datasets[i].label + '</td>');
+            }
+        }
+        legendHtml.push('</tr>');
+        legendHtml.push('</table>');
+        return legendHtml.join("");
+    }
+
+    window.myChart = new Chart(full, {
         type: 'line',
         data: <?php echo $chart_data; ?>,
         options: {
@@ -361,9 +478,14 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                 }],
                 yAxes: [{
                     ticks: {
-                        max: chart_max
+                        min: 0,
+                        max: chart_max[<?php echo "'{$city_substances[0]}'"; ?>]
                     }
                 }]
+            },
+            legendCallback: legendcallback,
+            legend: {
+                display: true
             }
         }
     });
