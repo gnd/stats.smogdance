@@ -137,7 +137,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     // Get data for all sensors from city
     $first = True;
     $first_id = 0;
-    $max_point = 0;
+    $max_point = array();
     $sensor_ids = array();
     $sensor_indexes = array();
     $sensor_timestamps = array();
@@ -149,7 +149,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     $res = $mydb->getCitySensors($city);
 
     if ($res->num_rows > 1) {
-        // Get sensor ids
+        // Get sensor ids, names and substances
         while ($sensor_desc = mysqli_fetch_array($res)) {
             $sensor_id = $sensor_desc[0];
             $sensor_ids[] = $sensor_id;
@@ -161,31 +161,45 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             }
             $sensor_names[$sensor_id] = $sensor_desc[1];
             $sensor_substances_tmp = explode(" ",$sensor_desc[2]);
+            sort($sensor_substances_tmp);
             $sensor_substances[$sensor_id] = $sensor_substances_tmp;
+            // build a list of all substances for a given city
             foreach ($sensor_substances_tmp as $substance) {
                 if (!in_array($substance,$city_substances)) {
                     $city_substances[] = $substance;
+                    // initialize max_point for each substance
+                    $max_point[$substance] = 0;
                 }
             }
         }
+        sort($city_substances);
 
         // Get data for all sensor ids
+        $i = 0;
         $data = $mydb->getLastMonthDataForSensors($sensor_ids, $city_substances);
-        while ($line = mysqli_fetch_array($data)) {
-            $sensor_data_temp[$line[0]][] = array($line[1], $line[2]);
-            if ($line[2] > $max_point) {
-                $max_point = $line[2];
+        while ($line = mysqli_fetch_array($data, MYSQLI_ASSOC)) {
+            $substance_data = array();
+            // create an assoc array with all substance data for a given timestamp
+            foreach ($sensor_substances[$line['sensor_id']] as $substance) {
+                    $substance_data[$substance] = $line[$substance];
+                    // search for maximum for each substance
+                    if ($line[$substance] > $max_point[$substance]) {
+                        $max_point[$substance] = $line[$substance];
+                    }
             }
+            $sensor_data_temp[$line['sensor_id']][] = array($line['timestamp'], $substance_data);
         }
 
         // Process unprecise timestamp data for all sensors from city
         $sensor_count = sizeof($sensor_ids);
         foreach ($sensor_data_temp[$first_id] as $line) {
             $sensor_timestamps[] = $line[0];
-            if ($line[1] == 0) {
-                $sensor_data[$first_id][] = '';
-            } else {
-                $sensor_data[$first_id][] = $line[1];
+            foreach ($sensor_substances[$sensor_id] as $substance) {
+                if ($line[1][$substance] == 0) {
+                    $sensor_data[$first_id][$substance][] = '';
+                } else {
+                    $sensor_data[$first_id][$substance][] = $line[1][$substance];
+                }
             }
             $first_time = strtotime($line[0]);
             foreach ($sensor_ids as $sensor_id) {
@@ -196,32 +210,46 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                     if (abs($time_diff) < 7) {
                         $new_index = $sensor_indexes[$sensor_id] + 1;
                         $sensor_indexes[$sensor_id] = $sensor_indexes[$sensor_id] + 1;
-                        $datapoint = (int)$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1];
-                        if ($datapoint == 0) {
-                            $sensor_data[$sensor_id][] = '';
-                        } else {
-                            $sensor_data[$sensor_id][] = $datapoint;
+                        foreach ($sensor_substances[$sensor_id] as $substance) {
+                            $datapoint = (int)$sensor_data_temp[$sensor_id][$sensor_indexes[$sensor_id]][1][$substance];
+                            if ($datapoint == 0) {
+                                $sensor_data[$sensor_id][$substance][] = '';
+                            } else {
+                                $sensor_data[$sensor_id][$substance][] = $datapoint;
+                            }
                         }
+                    // If the data from the other sensor is not timestampe within +-7 minutes
                     } else {
+                        // But we see that other sensor's timstamped data is in the past against the first sensors data
                         if ($time_diff > 0) {
+                            // We try to check the next data entry for the other sensor
                             $new_index = $sensor_indexes[$sensor_id] + 1;
                             $this_time = strtotime($sensor_data_temp[$sensor_id][$new_index][0]);
                             $time_diff = round(($first_time - $this_time)/60,2);
+                            // If we find its within +-7 minutes we store it
                             if (abs($time_diff) < 7) {
-                                $datapoint = (int)$sensor_data_temp[$sensor_id][$new_index][1];
-                                if ($datapoint == 0) {
-                                        $sensor_data[$sensor_id][] = '';
-                                } else {
-                                    $sensor_data[$sensor_id][] = $datapoint;
+                                foreach ($sensor_substances[$sensor_id] as $substance) {
+                                    $datapoint = (int)$sensor_data_temp[$sensor_id][$new_index][1][$substance];
+                                    if ($datapoint == 0) {
+                                            $sensor_data[$sensor_id][$substance][] = '';
+                                    } else {
+                                        $sensor_data[$sensor_id][$substance][] = $datapoint;
+                                    }
                                 }
                                 $new_index = $sensor_indexes[$sensor_id] + 1;
                                 $sensor_indexes[$sensor_id] = $new_index;
+                            // Otherwise we raise the index for the other sensor and store nothing
                             } else {
                                 $sensor_indexes[$sensor_id] = $new_index;
-                                $sensor_data[$sensor_id][] = '';
+                                foreach ($sensor_substances[$sensor_id] as $substance) {
+                                    $sensor_data[$sensor_id][$substance][] = '';
+                                }
                             }
+                        // If it is in the future, we keep the index as it is and store nothing for the current timestamp
                         } else {
-                            $sensor_data[$sensor_id][] = '';
+                            foreach ($sensor_substances[$sensor_id] as $substance) {
+                                $sensor_data[$sensor_id][$substance][] = '';
+                            }
                         }
                     }
                 }
@@ -239,13 +267,24 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         $chart_data = "{ labels: [\n {$labels} ],";
 
         // fill out datasets
+        $data_array = "var data_array = {};\n";
         $chart_data .= "\n\t\tdatasets: [\n";
         $i = 0;
         foreach ($sensor_ids as $sensor_id) {
+
+            // fill the data_array
+            $data_array .= "\n\t// create data_array[{$sensor_id}]\n";
+            $data_array .= "\tdata_array[{$sensor_id}] = {};\n";
+            foreach ($sensor_substances[$sensor_id] as $substance) {
+                $data = implode(",", $sensor_data[$sensor_id][$substance]);
+                $data = substr($data, 0, -2); // remove last colon
+                $data_array .= "\n\t// data for sensor id {$sensor_id} ({$sensor_names[$sensor_id]}) - substance {$substance}\n";
+                $data_array .= "\tdata_array[{$sensor_id}]['{$substance}'] = [{$data}];\n";
+            }
+
+            // prepare the chartjs data
             $chart_data .= "{ \n\t\t\tlabel: '{$sensor_names[$sensor_id]}',";
-            $data = implode(",", $sensor_data[$sensor_id]);
-            $data = substr($data, 0, -2); // remove last colon
-            $chart_data .= "\n\t\t\tdata: [ {$data} ],\n";
+            $chart_data .= "\n\t\t\tdata: data_array[{$sensor_id}]['{$city_substances[0]}'],\n";
             $chart_data .= "\t\t\tspanGaps: true,\n";
             $chart_data .= "\t\t\tborderWidth: 1,\n";
             $chart_data .= "\t\t\tborderColor: '#' + pal[{$i}],\n";
@@ -259,8 +298,12 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         }
         $chart_data = substr($chart_data, 0, -1)  . "\n]\n}";
 
-        // Compute chart_max
-        $chart_max = (floor($max_point / 10) + 2)  * 10;
+        // Compute chart_max for each substance
+        $chart_max_data = "var chart_max = {};\n";
+        foreach ($sensor_substances[$sensor_id] as $substance) {
+            $chart_max[$substance] = (floor($max_point[$substance] / 10) + 2)  * 10;
+            $chart_max_data .= "\tchart_max['{$substance}'] = {$chart_max[$substance]};\n";
+        }
 
         // send appropriate threshold to js - TODO - this has to be done in JS
         $chart_thresholds = $thresholds[$city_substances[0]];
@@ -319,7 +362,9 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
 <script>
     var full = document.getElementById("full").getContext('2d');
     var graph_height = window.innerHeight * 0.9;
-    var chart_max = <?php echo $chart_max; ?>;
+
+    // these are the maximum values for all substances
+    <?php echo $chart_max_data; ?>;
     var thresholds = <?php echo "[".implode(",", $chart_thresholds)."]"; ?>;
     var grd = full.createLinearGradient(0, graph_height,  0,  0);
     grd.addColorStop(0, '#9eec80');
@@ -339,6 +384,9 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     // generate palette
     var pal = palette('mpn65', <?php echo sizeof($sensor_ids); ?>);
 
+    // create data_array
+    <?php echo $data_array; ?>
+
     var myChart = new Chart(full, {
         type: 'line',
         data: <?php echo $chart_data; ?>,
@@ -356,7 +404,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                 }],
                 yAxes: [{
                     ticks: {
-                        max: chart_max
+                        max: chart_max[<?php echo "'{$city_substances[0]}'"; ?>]
                     }
                 }]
             }
