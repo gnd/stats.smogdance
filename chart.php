@@ -412,6 +412,10 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                 document.getElementById(city_substances[i]).style.backgroundColor = 'yellow';
             }
         }
+        // change max chart values
+        window.myChart.options.scales.yAxes[0].ticks.max = chart_max[substance];
+
+        // update chart
         window.myChart.update();
     }
 
