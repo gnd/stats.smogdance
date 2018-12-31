@@ -283,7 +283,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             }
 
             // prepare the chartjs data
-            $chart_data .= "{ \n\t\t\tlabel: '{$sensor_names[$sensor_id]}',";
+            $chart_data .= "{ \n\t\t\tlabel: '{$sensor_names[$sensor_id]} (id: {$sensor_id})',";
             $chart_data .= "\n\t\t\tdata: data_array[{$sensor_id}]['{$city_substances[0]}'],\n";
             $chart_data .= "\t\t\tspanGaps: true,\n";
             $chart_data .= "\t\t\tborderWidth: 1,\n";
@@ -291,7 +291,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             $chart_data .= "\t\t\tpointStyle: 'cross',\n";
             $chart_data .= "\t\t\tpointBackgroundColor: 'rgb(0,0,0,0.2)',\n";
             $chart_data .= "\t\t\tpointBorderColor: 'rgb(0,0,0,0.2)',\n";
-            $chart_data .= "\t\t\tbackgroundColor: 'rgba(255,255,255,0)',\n";
+            $chart_data .= "\t\t\tbackgroundColor: hexToRGBA('#' + pal[{$i}], 0),\n";
             $chart_data .= "\t\t\ttension: 0.6\n";
             $chart_data .= "},";
             $i++;
@@ -352,14 +352,69 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         if ($nodata) {
             echo "No data for given sensor";
         } else {
-            echo '<div class="chart-container" style="position: relative; height:90%; width:90%">' . "\n";
+            echo '<div class="chart-container" style="position: relative; width:87%; height:87%;">' . "\n";
             echo "\t\t" . '<canvas id="full"></canvas>' . "\n";
             echo "\t" . '</div>' . "\n";
-            echo "\t" . '<br/>' . "\n";
+            echo "\t" . '<br/><br/><br/>' . "\n";
         }
+        echo "<div style=\"padding-left: 1%;\">Substances available for {$city} (click): \n";
+        $i = 0;
+        foreach ($city_substances as $substance) {
+            if ($i == 0) {
+                echo "<button id='{$substance}' style=\"width: 50px; height: 20px; background-color: gold; border: 0px;\" onclick=\"change_substance('{$substance}');\">{$substance}</button>\n";
+                $i++;
+            } else {
+                echo "<button id='{$substance}' style=\"width: 50px; height: 20px; background-color: yellow; border: 0px;\" onclick=\"change_substance('{$substance}');\">{$substance}</button>\n";
+            }
+            echo "&nbsp;\n";
+        }
+        echo "</div>\n";
     ?>
 </body>
 <script>
+    // city name
+    var city_name = '<?php echo $city; ?>';
+
+    // sensor ids
+    var sensor_ids = [<?php echo implode(",", $sensor_ids); ?>];
+
+    // city_substances
+    var city_substances = [<?php echo "'" . implode("','", $city_substances) . "'"; ?>];
+
+    // create data_array
+    <?php echo $data_array; ?>
+
+    // HEX 2 RGB - taken from
+    function hexToR(h) {return parseInt((cutHex(h)).substring(0,2),16)}
+    function hexToG(h) {return parseInt((cutHex(h)).substring(2,4),16)}
+    function hexToB(h) {return parseInt((cutHex(h)).substring(4,6),16)}
+    function cutHex(h) {return (h.charAt(0)=="#") ? h.substring(1,7):h}
+    function hexToRGBA(h, alpha) {
+        return "rgba(" + hexToR(h) + "," + hexToG(h) + "," + hexToB(h) + "," + alpha + ")";
+    }
+
+    function change_substance(substance) {
+        for (var i=0; i< window.myChart.data.datasets.length; i++) {
+            var sensor_id = sensor_ids[i];
+            if (data_array[sensor_id][substance]) {
+                window.myChart.data.datasets[i].data = data_array[sensor_id][substance];
+            } else {
+                window.myChart.data.datasets[i].data = [];
+            }
+        }
+        // change the chart title
+        window.myChart.options.title.text = city_name + " " + substance.toUpperCase() + " (last 30 days)";
+        // change active button color
+        for (var i=0; i< city_substances.length; i++) {
+            if (city_substances[i] == substance) {
+                document.getElementById(city_substances[i]).style.backgroundColor = 'gold';
+            } else {
+                document.getElementById(city_substances[i]).style.backgroundColor = 'yellow';
+            }
+        }
+        window.myChart.update();
+    }
+
     var full = document.getElementById("full").getContext('2d');
     var graph_height = window.innerHeight * 0.9;
 
@@ -384,16 +439,13 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     // generate palette
     var pal = palette('mpn65', <?php echo sizeof($sensor_ids); ?>);
 
-    // create data_array
-    <?php echo $data_array; ?>
-
     // create a legendCallback - see: https://github.com/chartjs/Chart.js/issues/2565
     function legendcallback(chart) {
         var legendHtml = [];
         legendHtml.push('<table>');
         legendHtml.push('<tr>');
         for (var i=0; i<chart.data.datasets.length; i++) {
-            legendHtml.push('<td><div class="chart-legend" style="background-color:' + chart.data.datasets[i].backgroundColor + '"></div></td>');
+            legendHtml.push('<td><div class="chart-legend" style="background-color:' + chart.data.datasets[i].borderColor + '"></div></td>');
             if (chart.data.datasets[i].label) {
                 legendHtml.push(
                     '<td class="chart-legend-label-text" onclick="updateDataset(event, ' + '\'' + chart.legend.legendItems[i].datasetIndex + '\'' + ')">'
@@ -405,7 +457,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         return legendHtml.join("");
     }
 
-    var myChart = new Chart(full, {
+    window.myChart = new Chart(full, {
         type: 'line',
         data: <?php echo $chart_data; ?>,
         options: {
