@@ -82,7 +82,8 @@ if (isset($_REQUEST["id"]) && ($_REQUEST["id"] != "")) {
         }
         $labels = substr($labels, 0, -2); // remove last colon
         $chart_data = "{ labels: [\n {$labels} ],";
-        $chart_data .= "\n\t\tdatasets: [ { \n\t\t\tlabel: ' {$substance} - full',";
+
+        $chart_data .= "\n\t\tdatasets: [ { \n\t\t\tlabel: '".strtoupper($substance)."',";
 
         // create chart data for js
         $data = "";
