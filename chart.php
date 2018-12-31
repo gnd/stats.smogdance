@@ -141,34 +141,36 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     $sensor_ids = array();
     $sensor_indexes = array();
     $sensor_timestamps = array();
+    $sensor_substances = array();
     $sensor_data = array();
     $sensor_data_temp = array();
     $sensor_names = array();
-    $substance = "pm10";
+    $city_substances = array();
     $res = $mydb->getCitySensors($city);
-    //$time_mid = microtime(true);
-    //echo "\nReceived city sensors: " . strval($time_mid - $time_start);
+
     if ($res->num_rows > 1) {
-
-        // FIll arrays first
-        //$time_mid = microtime(true);
-        //echo "\nStarting array filling: " . strval($time_mid - $time_start);
-
         // Get sensor ids
         while ($sensor_desc = mysqli_fetch_array($res)) {
-            $sensor_ids[] = $sensor_desc[0];
-            $sensor_indexes[$sensor_desc[0]] = 0;
-            $sensor_data[$sensor_desc[0]] = array();
+            $sensor_id = $sensor_desc[0];
+            $sensor_ids[] = $sensor_id;
+            $sensor_indexes[$sensor_id] = 0;
+            $sensor_data[$sensor_id] = array();
             if ($first) {
-                $first_id = $sensor_desc[0];
+                $first_id = $sensor_id;
                 $first = False;
             }
-            $sensor_names[$sensor_desc[0]] = $sensor_desc[1];
+            $sensor_names[$sensor_id] = $sensor_desc[1];
+            $sensor_substances_tmp = explode(" ",$sensor_desc[2]);
+            $sensor_substances[$sensor_id] = $sensor_substances_tmp;
+            foreach ($sensor_substances_tmp as $substance) {
+                if (!in_array($substance,$city_substances)) {
+                    $city_substances[] = $substance;
+                }
+            }
         }
-        //$time_mid = microtime(true);
-        //echo "\nStarting array filling: " . strval($time_mid - $time_start);
+
         // Get data for all sensor ids
-        $data = $mydb->getLastMonthDataForSensors($sensor_ids);
+        $data = $mydb->getLastMonthDataForSensors($sensor_ids, $city_substances);
         while ($line = mysqli_fetch_array($data)) {
             $sensor_data_temp[$line[0]][] = array($line[1], $line[2]);
             if ($line[2] > $max_point) {
@@ -176,12 +178,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             }
         }
 
-        //$time_mid = microtime(true);
-        //echo "\nEnded array filling: " . strval($time_mid - $time_start);
-
         // Process unprecise timestamp data for all sensors from city
-        //$time_mid = microtime(true);
-        //echo "\nStarting array processing: " . strval($time_mid - $time_start);
         $sensor_count = sizeof($sensor_ids);
         foreach ($sensor_data_temp[$first_id] as $line) {
             $sensor_timestamps[] = $line[0];
@@ -234,8 +231,6 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         //echo "\nEnded array processing: " . strval($time_mid - $time_start);
 
         // create chart labels for js
-        //$time_mid = microtime(true);
-        //echo "\nStarting chart data: " . strval($time_mid - $time_start);
         $labels = "";
         foreach ($sensor_timestamps as $timestamp) {
             $labels .= "\t\t\t\t'" . $timestamp . "',\n";
@@ -267,8 +262,8 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         // Compute chart_max
         $chart_max = (floor($max_point / 10) + 2)  * 10;
 
-        // send appropriate threshold to js
-        $chart_thresholds = $thresholds[$substance];
+        // send appropriate threshold to js - TODO - this has to be done in JS
+        $chart_thresholds = $thresholds[$city_substances[0]];
         //$time_mid = microtime(true);
         //echo "\nEnded chart data: " . strval($time_mid - $time_start);
     } else {
@@ -285,25 +280,25 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             echo "smog.dance / no data\n";
         } else {
             if ($city_chart) {
-                echo "smog.dance / {$city} sensors - {$substance}\n";
+                echo "smog.dance / {$city} sensors - {$city_substances[0]}\n";
                 $city = ucfirst($city);
-                $substance = strtoupper($substance);
-                $chart_title = "{$city} - {$substance} (last 30 days)";
+                $substance = strtoupper($city_substances[0]);
+                $chart_title = "{$city} - {$city_substances[0]} (last 30 days)";
             } else {
-                echo "smog.dance / {$sensor_name}, {$city} - {$substance}\n";
+                echo "smog.dance / {$sensor_name}, {$city} - {$city_substances[0]}\n";
                 $city = ucfirst($city);
-                $substance = strtoupper($substance);
-                $chart_title = "{$sensor_name}, {$city} - {$substance}";
+                $substance = strtoupper($city_substances[0]);
+                $chart_title = "{$sensor_name}, {$city} - {$city_substances[0]}";
             }
         }
     ?>
 </title>
 
 <!-- MOMENT.JS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.23.0/moment.min.js"></script>
+<script src="moment.js"></script>
 
 <!-- CHART.JS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.min.js"></script>
+<script src="Chart.min.js"></script>
 
 <!-- PALETTE.JS -->
 <script src="palette.js"></script>

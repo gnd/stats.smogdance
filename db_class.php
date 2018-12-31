@@ -20,7 +20,7 @@ class db {
     }
 
     function getCitySensors($city) {
-        $result = $this->db->query($kak = "SELECT id, name FROM {$this->db_table} WHERE city = '" . $city . "';");
+        $result = $this->db->query($kak = "SELECT id, name, substances FROM {$this->db_table} WHERE city = '" . $city . "';");
         return $result;
     }
 
@@ -29,13 +29,14 @@ class db {
         return $result;
     }
 
-    function getLastMonthDataForSensors($sensors) {
+    function getLastMonthDataForSensors($sensors, $substances) {
         $sensors_selector = "";
         foreach ($sensors as $sensor) {
             $sensors_selector .= "sensor_id = {$sensor} OR ";
         }
         $sensors_selector = substr($sensors_selector, 0, -4);
-        $result = $this->db->query("SELECT sensor_id, timestamp, pm10 from {$this->data_table_month} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and ({$sensors_selector});");
+        $substances_selector = implode(", ", $substances);
+        $result = $this->db->query("SELECT sensor_id, timestamp, {$substances_selector} FROM {$this->data_table_month} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() and ({$sensors_selector});");
         return $result;
     }
 
