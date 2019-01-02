@@ -423,7 +423,13 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     var graph_height = window.innerHeight * 0.9;
 
     // these are the maximum values for all substances
-    <?php echo $chart_max_data; ?>;
+    <?php
+        if ($city_chart) {
+            echo $chart_max_data;
+        } else {
+            echo "var chart_max = {$chart_max};\n";
+        }
+    ?>;
     var thresholds = <?php echo "[".implode(",", $chart_thresholds)."]"; ?>;
     var grd = full.createLinearGradient(0, graph_height,  0,  0);
     grd.addColorStop(0, '#9eec80');
@@ -479,7 +485,13 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                 yAxes: [{
                     ticks: {
                         min: 0,
-                        max: chart_max[<?php echo "'{$city_substances[0]}'"; ?>]
+                        max: <?php
+                            if ($city_chart) {
+                                echo "chart_max['{$city_substances[0]}']";
+                            } else {
+                               echo "chart_max";
+                            }
+                            ?>
                     }
                 }]
             },
