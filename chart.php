@@ -378,7 +378,11 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             echo "\t" . '</div>' . "\n";
             echo "\t" . '<br/><br/><br/>' . "\n";
         }
-        echo "<div style=\"padding-left: 1%;\">Substances available for {$city} (click): \n";
+        if ($city_chart) {
+            echo "<div style=\"padding-left: 1%;\">Substances available for {$city} (click): \n";
+        } else {
+            echo "<div style=\"padding-left: 1%;\">Substances available for {$sensor_name}, {$city} (click): \n";
+        }
         $i = 0;
         foreach ($city_substances as $substance) {
             if ($i == 0) {
