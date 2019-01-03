@@ -21,6 +21,7 @@ class db {
 
     function getCitySensors($city) {
         // THIS NEEDS ONLY_FULL_GROUP_BY turned off in SQL_MODE (TODO fix)
+        // Seems like this has increased loading times tenfold on production, check (TODO)
         $result = $this->db->query("SELECT s.id, s.name, s.substances, count(sd.timestamp) as cnt FROM {$this->db_table} s, {$this->data_table_month} sd WHERE city = '" . $city . "' AND s.id = sd.sensor_id GROUP BY sd.sensor_id ORDER BY cnt DESC;");
         return $result;
     }
