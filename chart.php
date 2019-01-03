@@ -53,49 +53,70 @@ if (isset($_REQUEST["id"]) && ($_REQUEST["id"] != "")) {
     $time_start = microtime(true);
     $sensor_id = validate_int($_REQUEST["id"], $mydb->db);
 
+    $max_point = array();
+    $sensor_ids[] = $sensor_id;
+    $sensor_data = array();
+    $sensor_substances = array();
+    $sensor_timestamps = array();
+
     // Get sensor info
     $res = $mydb->getSensorInfo($sensor_id);
     $sensor_data = mysqli_fetch_array($res);
     $city = $sensor_data[0];
     $sensor_name = $sensor_data[1];
-    $substance = "pm10";
+    $sensor_substances = explode(" ",$sensor_data[2]);
+    sort($sensor_substances);
+    $city_substances = $sensor_substances;
+    // build a list of all substances for a given city
+    foreach ($sensor_substances as $substance) {
+        $max_point[$substance] = 0;
+    }
 
     // Get sensor data and the max value for the last 30 days
-    $points = [];
-    $max_point = 0;
-    $res = $mydb->getLastMonthData($sensor_id);
+    $res = $mydb->getLastMonthData($sensor_id, $sensor_substances);
     if ($res->num_rows > 1) {
-        while ($line = mysqli_fetch_array($res)) {
-            $points[] = $line;
-            if ($max_point < $line[1]) {
-                $max_point = $line[1];
+        while ($line = mysqli_fetch_array($res, MYSQLI_ASSOC)) {
+            $sensor_timestamps[] = $line['timestamp'];
+            // create an assoc array with all substance data for a given timestamp
+            foreach ($sensor_substances as $substance) {
+                $sensor_data[$substance][] = $line[$substance];
+                // search for maximum for each substance
+                if ($line[$substance] > $max_point[$substance]) {
+                    $max_point[$substance] = $line[$substance];
+                }
             }
         }
 
-        // Compute chart_max
-        $chart_max = (floor($max_point / 10) + 2)  * 10;
+        // Compute chart_max for each substance
+        $chart_max_data = "var chart_max = {};\n";
+        foreach ($sensor_substances as $substance) {
+            $chart_max[$substance] = (floor($max_point[$substance] / 10) + 2)  * 10;
+            $chart_max_data .= "\tchart_max['{$substance}'] = {$chart_max[$substance]};\n";
+        }
 
         // create chart labels for js
         $labels = "";
-        foreach ($points as $point) {
-            $labels .= "\t\t\t\t'" . $point[0] . "',\n";
+        foreach ($sensor_timestamps as $timestamp) {
+            $labels .= "\t\t\t\t'" . $timestamp . "',\n";
         }
         $labels = substr($labels, 0, -2); // remove last colon
         $chart_data = "{ labels: [\n {$labels} ],";
+        $chart_data .= "\n\t\tdatasets: [ { \n\t\t\tlabel: '".strtoupper($sensor_substances[0])."',";
 
-        $chart_data .= "\n\t\tdatasets: [ { \n\t\t\tlabel: '".strtoupper($substance)."',";
+        // fill the data_array
+        $data_array = "var data_array = {};\n";
+        $data_array .= "\n\t// create data_array[{$sensor_id}]\n";
+        $data_array .= "\tdata_array[{$sensor_id}] = {};\n";
+        foreach ($sensor_substances as $substance) {
+            $data = implode(",", $sensor_data[$substance]);
+            $data = substr($data, 0, -2); // remove last colon
+            $data_array .= "\n\t// data for sensor id {$sensor_id} ({$sensor_name}) - substance {$substance}\n";
+            $data_array .= "\tdata_array[{$sensor_id}]['{$substance}'] = [{$data}];\n";
+        }
 
         // create chart data for js
-        $data = "";
-        foreach ($points as $point) {
-            if ($point[1] != "") {
-                $data .= $point[1] . ",";
-            } else {
-                $data .= "'',";
-            }
-        }
         $data = substr($data, 0, -2); // remove last colon
-        $chart_data .= "\n\t\t\tdata: [ {$data} ],\n";
+        $chart_data .= "\n\t\t\tdata: data_array[{$sensor_id}]['{$sensor_substances[0]}'],\n";
         $chart_data .= "\t\t\tspanGaps: true,\n";
         $chart_data .= "\t\t\tborderWidth: 1,\n";
         $chart_data .= "\t\t\tborderColor: grd,\n";
@@ -423,13 +444,8 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     var graph_height = window.innerHeight * 0.9;
 
     // these are the maximum values for all substances
-    <?php
-        if ($city_chart) {
-            echo $chart_max_data;
-        } else {
-            echo "var chart_max = {$chart_max};\n";
-        }
-    ?>;
+    <?php echo $chart_max_data; ?>
+
     var thresholds = <?php echo "[".implode(",", $chart_thresholds)."]"; ?>;
     var grd = full.createLinearGradient(0, graph_height,  0,  0);
     grd.addColorStop(0, '#9eec80');
@@ -485,13 +501,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
                 yAxes: [{
                     ticks: {
                         min: 0,
-                        max: <?php
-                            if ($city_chart) {
-                                echo "chart_max['{$city_substances[0]}']";
-                            } else {
-                               echo "chart_max";
-                            }
-                            ?>
+                        max: <?php echo "chart_max['{$city_substances[0]}']"; ?>
                     }
                 }]
             },
