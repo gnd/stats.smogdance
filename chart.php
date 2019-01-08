@@ -65,6 +65,7 @@ if (isset($_REQUEST["id"]) && ($_REQUEST["id"] != "")) {
     $city = $sensor_data[0];
     $sensor_name = $sensor_data[1];
     $sensor_substances = explode(" ",$sensor_data[2]);
+    $country = $sensor_data[3];
     sort($sensor_substances);
     $city_substances = $sensor_substances;
     // build a list of all substances for a given city
@@ -176,6 +177,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             $sensor_ids[] = $sensor_id;
             $sensor_indexes[$sensor_id] = 0;
             $sensor_data[$sensor_id] = array();
+            $country = $sensor_desc[4];
             if ($first) {
                 $first_id = $sensor_id;
                 $first = False;
@@ -367,34 +369,64 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
 <!-- PALETTE.JS -->
 <script src="palette.js"></script>
 
+<!-- MOBILE & DESKTOP STYLES -->
+<link rel="stylesheet" media='screen' href="style.css"/>
+
 </head>
-<body>
+<body style="margin: 0;">
+    <div id="nav_top" style="width: 99%; padding-left: 1%; padding-top: 0.5%; border-bottom: 1px solid black; padding-bottom: 1%;">
+        <?php
+            $cityname = strtolower($city);
+            $countryname = strtoupper($country);
+            echo "\t\t<a class=\"menu_link\" href=\"{$site_url}\">Smog Dance</a>\n";
+            echo "\t\t/ <a class=\"menu_link\" href=\"{$site_url}/#{$country}\">{$countryname}</a>\n";
+            echo "\t\t/ <a class=\"menu_link\" href=\"{$site_url}/chart.php?city={$cityname}\">{$city}</a>\n";
+            if ($city_chart) {
+                echo "\t\t</br>\n";
+                echo "\t\t<div style=\"float: left; margin-top: 0.25%; padding-top: 0.25%; border-top: 1px solid black;\">Sensors available in {$city}: \n";
+                foreach ($sensor_ids as $sensor_id) {
+                    echo "\t\t\t <a class=\"menu_link\" href=\"{$site_url}\chart.php?id={$sensor_id}\">{$sensor_names[$sensor_id]}</a>\n";
+                }
+                echo "\t\t</div>&nbsp;\n";
+            } else {
+                echo "\t\t/ <a class=\"menu_link\" href=\"{$site_url}/chart.php?id={$sensor_id}\">{$sensor_name}</a>\n";
+            }
+        ?>
+    </div>
     <?php
         if ($nodata) {
             echo "No data for given sensor";
         } else {
-            echo '<div class="chart-container" style="position: relative; width:87%; height:87%;">' . "\n";
+            echo '<div class="chart-container" style="padding-left: 1%; position: relative; width:85%; height:83%;">' . "\n";
             echo "\t\t" . '<canvas id="full"></canvas>' . "\n";
             echo "\t" . '</div>' . "\n";
             echo "\t" . '<br/><br/><br/>' . "\n";
         }
-        if ($city_chart) {
-            echo "<div style=\"padding-left: 1%;\">Substances available for {$city} (click): \n";
-        } else {
-            echo "<div style=\"padding-left: 1%;\">Substances available for {$sensor_name}, {$city} (click): \n";
-        }
-        $i = 0;
-        foreach ($city_substances as $substance) {
-            if ($i == 0) {
-                echo "<button id='{$substance}' style=\"width: 50px; height: 20px; background-color: gold; border: 0px;\" onclick=\"change_substance('{$substance}');\">{$substance}</button>\n";
-                $i++;
-            } else {
-                echo "<button id='{$substance}' style=\"width: 50px; height: 20px; background-color: yellow; border: 0px;\" onclick=\"change_substance('{$substance}');\">{$substance}</button>\n";
-            }
-            echo "&nbsp;\n";
-        }
-        echo "</div>\n";
     ?>
+    <div id="nav_bottom" style="width: 100%; background-color: gold; border: 2px; border-color: black;">
+        <?php
+            if ($city_chart) {
+                echo "<div style=\"padding-left: 1%; float: left;\">Substances available for {$city} (click): \n";
+            } else {
+                echo "<div style=\"padding-left: 1%; float: left;\">Substances available for {$sensor_name}, {$city} (click): \n";
+            }
+            $i = 0;
+            foreach ($city_substances as $substance) {
+                if ($i == 0) {
+                    echo "\t\t\t<button id='{$substance}' style=\"width: 50px; height: 20px; background-color: gold; border: 0px;\" onclick=\"change_substance('{$substance}');\">{$substance}</button>\n";
+                    $i++;
+                } else {
+                    echo "\t\t\t<button id='{$substance}' style=\"width: 50px; height: 20px; background-color: yellow; border: 0px;\" onclick=\"change_substance('{$substance}');\">{$substance}</button>\n";
+                }
+                echo "\t\t\t&nbsp;\n";
+            }
+            echo "\t\t</div>\n";
+
+            // show generation duration
+            $time_mid = microtime(true);
+            echo "\t\t<div style=\"float: right; font-size: 11px; padding-right: 1%; margin-top: 0.5%;\">Generated in: " . strval($time_mid - $time_start) . " sec. </div>\n";
+        ?>
+    </div>
 </body>
 <script>
     // city name
@@ -516,8 +548,4 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         }
     });
 </script>
-<?php
-$time_mid = microtime(true);
-echo "<p style=\"font-size: 11px; position: absolute; bottom: 1%; left: 1%;\">Generated in: " . strval($time_mid - $time_start) . " sec. Back to <a href=\"https://stats.smog.dance\" style=\"color: black;\">stats.smog.dance</a></p>";
-?>
 </html>
