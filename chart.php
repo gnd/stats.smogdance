@@ -35,7 +35,7 @@ $thresholds['pm25'] = [0, 15, 40, 65, 150];            # ??
 $thresholds['co'] = [0, 10000, 20000, 30000, 40000];   # http://ec.europa.eu/environment/air/quality/standards.htm
 $thresholds['no2'] = [0, 100, 150, 200, 300];          # http://ec.europa.eu/environment/air/quality/standards.htm
 
-
+include "sttngs.php";
 include "db_class.php";
 $mydb = new db();
 $mydb->connect();
