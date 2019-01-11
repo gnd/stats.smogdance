@@ -27,14 +27,6 @@ function validate_str($input, $link) {
     return mysqli_real_escape_string($link, $input);
 }
 
-// substance concentration thresholds in air (usually mg/m3)
-$thresholds['so2'] = [0, 125, 350, 500, 800];		    # http://ec.europa.eu/environment/air/quality/standards.htm
-$thresholds['o3'] = [0, 50, 100, 150, 200, 300];       # saved in smogdance local
-$thresholds['pm10'] = [0, 55, 155, 255, 355];          # ??
-$thresholds['pm25'] = [0, 15, 40, 65, 150];            # ??
-$thresholds['co'] = [0, 10000, 20000, 30000, 40000];   # http://ec.europa.eu/environment/air/quality/standards.htm
-$thresholds['no2'] = [0, 100, 150, 200, 300];          # http://ec.europa.eu/environment/air/quality/standards.htm
-
 include "sttngs.php";
 include "db_class.php";
 $mydb = new db();
@@ -127,9 +119,6 @@ if (isset($_REQUEST["id"]) && ($_REQUEST["id"] != "")) {
         $chart_data .= "\t\t\tbackgroundColor: grd,\n";
         $chart_data .= "\t\t\ttension: 0.6\n";
         $chart_data .= "\t\t}\n\t]\n}";
-
-        // send appropriate threshold to js
-        $chart_thresholds = $thresholds[$substance];
     } else {
         $nodata = True;
     }
@@ -327,11 +316,6 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             $chart_max[$substance] = (floor($max_point[$substance] / 10) + 2)  * 10;
             $chart_max_data .= "\tchart_max['{$substance}'] = {$chart_max[$substance]};\n";
         }
-
-        // send appropriate threshold to js - TODO - this has to be done in JS
-        $chart_thresholds = $thresholds[$city_substances[0]];
-        //$time_mid = microtime(true);
-        //echo "\nEnded chart data: " . strval($time_mid - $time_start);
     } else {
         $nodata = True;
     }
@@ -429,6 +413,15 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     </div>
 </body>
 <script>
+    // the graph
+    var full = document.getElementById("full").getContext('2d');
+
+    // graph height TODO globally
+    var graph_height = window.innerHeight * 0.83;
+
+    // graph threshold gradient (for single sensor graphs)
+    var grd = full.createLinearGradient(0, graph_height,  0,  0);
+
     // city name
     var city_name = '<?php echo $city; ?>';
 
@@ -438,18 +431,36 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     // city_substances
     var city_substances = [<?php echo "'" . implode("','", $city_substances) . "'"; ?>];
 
-    // create data_array
-    <?php echo $data_array; ?>
+    // these are the maximum values for all substances
+    <?php echo $chart_max_data; ?>
 
-    // HEX 2 RGB - taken from
+    // these are the threshold values for all substances
+    // substance concentration thresholds in air (usually mg/m3)
+    // TODO verify the levels and update sources
+    var thresholds = {};
+    thresholds['so2'] = [0, 125, 350, 500, 800];            // http://ec.europa.eu/environment/air/quality/standards.htm
+    thresholds['o3'] = [0, 50, 100, 150, 200, 300];         // saved in smogdance local
+    thresholds['pm10'] = [0, 55, 155, 255, 355];            // ??
+    thresholds['pm25'] = [0, 15, 40, 65, 150];              // ??
+    thresholds['co'] = [0, 10000, 20000, 30000, 40000];    // http://ec.europa.eu/environment/air/quality/standards.htm
+    thresholds['no2'] = [0, 100, 150, 200, 300];            // http://ec.europa.eu/environment/air/quality/standards.htm
+
+    // generate palette
+    var pal = palette('mpn65', <?php echo sizeof($sensor_ids); ?>);
+
+    // HEX to R,G,B - taken from http://www.javascripter.net/faq/hextorgb.htm
     function hexToR(h) {return parseInt((cutHex(h)).substring(0,2),16)}
     function hexToG(h) {return parseInt((cutHex(h)).substring(2,4),16)}
     function hexToB(h) {return parseInt((cutHex(h)).substring(4,6),16)}
     function cutHex(h) {return (h.charAt(0)=="#") ? h.substring(1,7):h}
+
+    // HEX to RGBA
     function hexToRGBA(h, alpha) {
         return "rgba(" + hexToR(h) + "," + hexToG(h) + "," + hexToB(h) + "," + alpha + ")";
     }
 
+    // This takes care of data array switching and chart titles
+    // when choosing different substances
     function change_substance(substance) {
         for (var i=0; i< window.myChart.data.datasets.length; i++) {
             var sensor_id = sensor_ids[i];
@@ -471,35 +482,12 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         }
         // change max chart values
         window.myChart.options.scales.yAxes[0].ticks.max = chart_max[substance];
+        // change chart gradient
+        change_thresholds(substance, grd);
 
         // update chart
         window.myChart.update();
     }
-
-    var full = document.getElementById("full").getContext('2d');
-    var graph_height = window.innerHeight * 0.9;
-
-    // these are the maximum values for all substances
-    <?php echo $chart_max_data; ?>
-
-    var thresholds = <?php echo "[".implode(",", $chart_thresholds)."]"; ?>;
-    var grd = full.createLinearGradient(0, graph_height,  0,  0);
-    grd.addColorStop(0, '#9eec80');
-    if ((thresholds[1] / chart_max) < 1) {
-        grd.addColorStop((thresholds[1] / chart_max), '#ffff00');
-    }
-    if ((thresholds[2] / chart_max) < 1) {
-        grd.addColorStop((thresholds[2] / chart_max), '#ffa500');
-    }
-    if ((thresholds[3] / chart_max) < 1) {
-        grd.addColorStop((thresholds[3] / chart_max), '#ff0000');
-    }
-    if ((thresholds[4] / chart_max) < 1) {
-        grd.addColorStop((thresholds[4] / chart_max), '#e50883');
-    }
-
-    // generate palette
-    var pal = palette('mpn65', <?php echo sizeof($sensor_ids); ?>);
 
     // create a legendCallback - see: https://github.com/chartjs/Chart.js/issues/2565
     function legendcallback(chart) {
@@ -519,6 +507,30 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         return legendHtml.join("");
     }
 
+    // This creates a specific gradient based on the particular thresholds for a substance
+    function change_thresholds(substance, grd) {
+        	grd.addColorStop(0, '#9eec80');
+        	if ((thresholds[substance][1] / chart_max[substance]) < 1) {
+            	grd.addColorStop((thresholds[substance][1] / chart_max[substance]), '#ffff00');
+        	}
+        	if ((thresholds[substance][2] / chart_max[substance]) < 1) {
+            	grd.addColorStop((thresholds[substance][2] / chart_max[substance]), '#ffa500');
+        	}
+        	if ((thresholds[substance][3] / chart_max[substance]) < 1) {
+            	grd.addColorStop((thresholds[substance][3] / chart_max[substance]), '#ff0000');
+        	}
+        	if ((thresholds[substance][4] / chart_max[substance]) < 1) {
+            	grd.addColorStop((thresholds[substance][4] / chart_max[substance]), '#e50883');
+        	}
+    }
+
+    // initially set thresholds to the values of the first substance
+    change_thresholds(city_substances[0], grd);
+
+    // create data_array
+    <?php echo $data_array; ?>
+
+    ////// The chart
     window.myChart = new Chart(full, {
         type: 'line',
         data: <?php echo $chart_data; ?>,
