@@ -10,4 +10,7 @@ $db_table = "";
 $data_table = "";
 $data_table_month = "";
 
+// site settings
+$site_url = "";
+
 ?>
