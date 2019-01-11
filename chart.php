@@ -159,7 +159,7 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     $city_substances = array();
     $res = $mydb->getCitySensors($city);
 
-    if ($res->num_rows > 1) {
+    if ($res->num_rows > 0) {
         // Get sensor ids, names and substances
         while ($sensor_desc = mysqli_fetch_array($res)) {
             $sensor_id = $sensor_desc[0];
