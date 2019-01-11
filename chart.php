@@ -422,6 +422,9 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
     // graph threshold gradient (for single sensor graphs)
     var grd = full.createLinearGradient(0, graph_height,  0,  0);
 
+    // is city_chart ?
+    var city_chart =<?php echo $city_chart ? "true" : "false"; ?>;
+
     // city name
     var city_name = '<?php echo $city; ?>';
 
@@ -482,8 +485,13 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         }
         // change max chart values
         window.myChart.options.scales.yAxes[0].ticks.max = chart_max[substance];
-        // change chart gradient
-        change_thresholds(substance, grd);
+
+        if (!city_chart) {
+            // change chart gradient
+            grd = full.createLinearGradient(0, graph_height,  0,  0);
+            grd = change_thresholds(substance, grd);
+            window.myChart.data.datasets[0].backgroundColor = grd;
+        }
 
         // update chart
         window.myChart.update();
@@ -520,8 +528,9 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
             	grd.addColorStop((thresholds[substance][3] / chart_max[substance]), '#ff0000');
         	}
         	if ((thresholds[substance][4] / chart_max[substance]) < 1) {
-            	grd.addColorStop((thresholds[substance][4] / chart_max[substance]), '#e50883');
+            	grd.addColorStop((thresholds[substance][4] / chart_max[substance]), '#791D51');
         	}
+            return grd;
     }
 
     // initially set thresholds to the values of the first substance
