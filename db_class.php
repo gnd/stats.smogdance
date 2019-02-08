@@ -9,6 +9,7 @@ class db {
     function connect() {
         include "sttngs.php";
         $this->db = new mysqli($db_host, $db_user, $db_pass, $db_name);
+        $this->db->query("SET NAMES utf8");
         $this->prfx = $db_prfx;
         $this->db_table = $db_table;
         $this->data_table = $data_table;
@@ -48,6 +49,10 @@ class db {
         return $result;
     }
 
+    function getCitySensorsPosition($city) {
+        $result = $this->db->query("SELECT id, name, country, gps FROM {$this->db_table} WHERE city = '" . $city . "';");
+        return $result;
+    }
 }
 
 ?>
