@@ -206,8 +206,8 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         $sensor_count = sizeof($sensor_ids);
         foreach ($sensor_data_temp[$first_id] as $line) {
             $sensor_timestamps[] = $line[0];
-            foreach ($sensor_substances[$sensor_id] as $substance) {
-                var_dump($line);
+            foreach ($sensor_substances[$first_id] as $substance) {
+                echo "checking for {$substance} in line: "; var_dump($line); echo "<br/>\n";
                 if ($line[1][$substance] == 0) {
                     $sensor_data[$first_id][$substance][] = '';
                 } else {
