@@ -207,10 +207,10 @@ if (isset($_REQUEST["city"]) && $_REQUEST["city"] != "") {
         foreach ($sensor_data_temp[$first_id] as $line) {
             $sensor_timestamps[] = $line[0];
             foreach ($sensor_substances[$sensor_id] as $substance) {
-                if ($line[1][$substance] == 0) {
+                if ($line[$substance] == 0) {
                     $sensor_data[$first_id][$substance][] = '';
                 } else {
-                    $sensor_data[$first_id][$substance][] = $line[1][$substance];
+                    $sensor_data[$first_id][$substance][] = $line[$substance];
                 }
             }
             $first_time = strtotime($line[0]);

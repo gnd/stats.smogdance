@@ -80,7 +80,7 @@ var sensor_positions = [<?php echo implode(",", $sensor_positions); ?>];
 
 // draw sensor positions
 for (var i=0; i < sensor_positions.length; i++) {
-    var circle = L.circle(sensor_positions[i], {color: 'red', fillColor: '#f03', fillOpacity: 0.5, radius: 100}).addTo(mymap);
+    var circle = L.circle(sensor_positions[i], {color: 'red', fillColor: '#f03', fillOpacity: 0.5, radius: 200}).addTo(mymap);
 }
 
 </script>
