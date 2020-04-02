@@ -29,7 +29,7 @@ class db {
 
     function getLastMonthData($sensor_id, $substances) {
         $substances_selector = implode(", ", $substances);
-        $result = $this->db->query("SELECT timestamp, {$substances_selector} FROM {$this->data_table_month} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() AND sensor_id = " . $sensor_id . ";");
+        $result = $this->db->query("SELECT timestamp, {$substances_selector} FROM {$this->data_table_month} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() AND sensor_id = " . $sensor_id . " ORDER BY timestamp;");
         return $result;
     }
 
@@ -40,7 +40,7 @@ class db {
         }
         $sensors_selector = substr($sensors_selector, 0, -4);
         $substances_selector = implode(", ", $substances);
-        $result = $this->db->query("SELECT sensor_id, timestamp, {$substances_selector} FROM {$this->data_table_month} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() AND ({$sensors_selector});");
+        $result = $this->db->query("SELECT sensor_id, timestamp, {$substances_selector} FROM {$this->data_table_month} WHERE timestamp > DATE_SUB(now(), INTERVAL 30 DAY) AND timestamp <= now() AND ({$sensors_selector}) ORDER BY timestamp;");
         return $result;
     }
 
